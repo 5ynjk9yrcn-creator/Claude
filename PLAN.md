@@ -2,6 +2,8 @@
 
 *Written in plain English for a non-technical founder. Last updated: 2026-08-18.*
 
+**Decisions made:** iPhone-only for the beta (all testing through TestFlight). Phones are in **Canada**, so Twilio gets a Canadian phone number — Canada skips the slow US "A2P" registration process, though we'll still do a short number-verification step in Phase 4.
+
 ## What we're building
 
 A phone app with two sides:
@@ -78,7 +80,7 @@ EAS builds the real app → upload to TestFlight → you and a few families beta
 | 1 | **Apple Developer Program** | https://developer.apple.com/programs/enroll/ | $99/year | Phase 4 (push) and Phase 6 (TestFlight) | **Start today** — approval can take days. Enroll with your Apple ID. |
 | 2 | **Expo** | https://expo.dev/signup | Free | Phase 1 | Just sign up; no keys needed yet, you'll log in when we build. |
 | 3 | **Supabase** | https://supabase.com/dashboard/sign-up | Free tier is plenty for beta | Phase 2 | After signup, create one "project" (I'll tell you exactly what to click). |
-| 4 | **Twilio** | https://www.twilio.com/try-twilio | ~$1/mo for a number + ~1¢ per text | Phase 4 | Trial accounts can only text numbers you verify — fine for testing. **Heads-up:** sending texts to strangers in the US requires a registration step (called A2P) that takes days to weeks — we'll start it during Phase 4 so it's ready before real beta families join. |
+| 4 | **Twilio** | https://www.twilio.com/try-twilio | ~$1.50/mo for a Canadian number + a few cents per text | Phase 4 | Trial accounts can only text phone numbers you've verified — fine for testing with your own family. We'll buy a **Canadian** number in Phase 4 and complete a short verification step so texts deliver reliably to beta families. |
 | 5 | **Resend** | https://resend.com/signup | Free | Phase 4 | Sends the "job failed" emails to you. Two-minute signup. |
 
 **How you'll give me keys safely:** never paste keys into a public place. When each phase needs one, I'll tell you exactly which page in that service's dashboard to open and which value to copy, and we'll put it in the project's secret storage (I'll walk you through it).
