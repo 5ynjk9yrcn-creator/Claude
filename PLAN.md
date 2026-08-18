@@ -4,6 +4,10 @@
 
 **Decisions made:** iPhone-only for the beta (all testing through TestFlight). Phones are in **Canada**, so Twilio gets a Canadian phone number — Canada skips the slow US "A2P" registration process, though we'll still do a short number-verification step in Phase 4.
 
+**Product additions (Austin, 2026-08-18):** send-a-❤️ back to the parent (Phase 3); "Not great" mood alerts, false-alarm flow, and callable alert texts (Phase 4); weekly story summary, photo on the sun screen, read-only circle members, and vacation pause (Phase 5). A landline/SMS-only parent mode was considered and parked for v2.
+
+**Ideas we deliberately said no to for v1:** medication reminders, fall detection, health tracking, in-app chat — they complicate the parent's one-tap screen and drag the product toward regulated medical-alert territory. The one-tap purity is the moat.
+
 ## What we're building
 
 A phone app with two sides:
@@ -48,7 +52,10 @@ Signing up actually creates an account. Family onboarding actually creates a cir
 
 ### Phase 3 — Check-ins for real
 The sun button records a check-in in the database. Streak counts. Mood is saved. The family dashboard shows today's real status and the real 14-day history. Parent's phone being offline is handled: the tap is saved on the phone and sent up automatically when it reconnects.
-**You test:** check in as the parent, watch the family dashboard update.
+
+Also in this phase:
+- **Love back:** after a check-in, the family member can tap "Send a ❤️" — the parent's next morning screen says "{Family member} saw you were OK and sent you love."
+**You test:** check in as the parent, watch the family dashboard update, send a ❤️ back.
 **I need from you:** nothing new.
 
 ### Phase 4 — Reminders, escalation, and the safety rules
@@ -62,11 +69,23 @@ The non-negotiables, and how each is met:
 - **Timezones:** the deadline is stored as "8:00 AM in America/Chicago" (for example), not as a fixed clock time, so it's always evaluated in the parent's local day — daylight saving handled automatically.
 - **Test mode:** a switch on the family dashboard sets a fake deadline a few minutes from now, so you can watch the whole reminder → alert → backup chain fire end to end without waiting a day.
 
-**You test:** flip test mode on, don't check in, and watch your phone get the push and the texts on schedule.
+Also in this phase:
+- **"Not great" means something:** if the parent taps "Not great," the family member gets a gentle heads-up — "Ruth checked in but isn't feeling great today. Maybe call?"
+- **False-alarm flow:** if the parent checks in *after* an alert already went out, the family instantly gets "She's OK now — checked in at 11:20."
+- **Callable alerts:** every alert text includes the parent's phone number so the family can call back in one tap from the message itself.
+
+**You test:** flip test mode on, don't check in, and watch your phone get the push and the texts on schedule — then check in late and watch the false-alarm text arrive.
 **I need from you:** Twilio keys + a Twilio phone number, Resend key, Apple Developer account (for iPhone push notifications).
 
-### Phase 5 — Polish and edge cases
-Empty states, error messages in plain language, what happens when the parent checks in *after* an alert already went out ("false alarm — they're OK now" notification to family), accessibility pass on the parent screens (huge tap targets, works with large system text).
+### Phase 5 — Polish, warmth, and edge cases
+Empty states, error messages in plain language, accessibility pass on the parent screens (huge tap targets, works with large system text).
+
+Also in this phase:
+- **Weekly story:** every Sunday, the family member gets a warm summary — "Ruth checked in 7 for 7 this week, usually around 7:40am, felt good most days." Easy to screenshot and forward to siblings.
+- **Photo on the sun screen:** the family can add a photo (say, the grandkids) that appears on the parent's morning screen.
+- **Read-only circle members:** siblings can be invited to see the dashboard without paying — every extra watcher is word of mouth.
+- **Vacation / hospital pause:** a pause switch so streaks and alerts don't misfire when the parent is away, with an auto-resume date so nobody forgets to turn it back on.
+
 **You test:** a full realistic week of use, plus the weird cases I'll give you a checklist for.
 
 ### Phase 6 — Ship it
