@@ -6,11 +6,11 @@ A daily check-in app for aging parents. The parent taps one big sun button each 
 
 ## Status
 
-- **Current phase:** 2 published — cloud accounts, circles, invite codes, offline-safe check-ins
+- **Current phase:** 3 published — send-a-❤️ between family and parent (backend smoke-tested end to end)
 - Expo project: https://expo.dev/accounts/macntyrs-team/projects/ok-today (updates publish to the `main` branch)
 - Supabase project: "Ok - Today" (`lotbohsxmttxxropegkt`, us-east-1) — tables `profiles`, `circles`, `contacts`, `checkins` with row-level security; anonymous sign-in and email auto-confirm enabled
 - The design prototype lives in `design/ok-today-prototype.jsx` and is the visual source of truth.
-- Phase 3 (real dashboard sync + love-back) is next; Phase 4 needs Twilio + Resend + Apple Developer.
+- Phase 4 (reminders + escalation) is next — needs Twilio, Resend, and the approved Apple Developer account.
 
 ## How to test Phase 1 on your iPhone
 
