@@ -19,11 +19,15 @@ export default function Invite() {
 
   const finish = () => {
     update({
-      setupComplete: true,
       // Demo history so the dashboard looks real during Phase 1 testing.
-      checkins: Object.keys(data?.checkins ?? {}).length ? data!.checkins : seedCheckins(),
+      watchedCheckins: Object.keys(data?.watchedCheckins ?? {}).length
+        ? data!.watchedCheckins
+        : seedCheckins(),
+      ...(data?.role === "both" ? {} : { setupComplete: true }),
     });
-    router.replace("/family");
+    // A "both" account still needs its own check-in name before landing home.
+    if (data?.role === "both") router.push("/parent-join");
+    else router.replace("/family");
   };
 
   return (

@@ -18,14 +18,18 @@ const KEY = "oktoday-v1";
 export type CheckIn = { iso: string; mood: Mood | null };
 export type Contact = { name: string; phone: string; isPrimary: boolean };
 
+export type Role = "parent" | "family" | "both";
+
 export type AppData = {
-  role: "parent" | "family" | null;
+  role: Role | null;
   setupComplete: boolean;
-  parentName: string;
+  myName: string; // the person on THIS phone who taps the sun (parent/both)
+  parentName: string; // the person being watched over (family/both)
   deadline: string; // "HH:MM" in the parent's timezone
   timezone: string; // IANA name, e.g. "America/Toronto"
   contacts: Contact[];
-  checkins: Record<string, CheckIn>; // key: YYYY-MM-DD (parent-local)
+  checkins: Record<string, CheckIn>; // this phone's own check-ins, key YYYY-MM-DD
+  watchedCheckins: Record<string, CheckIn>; // the watched person's history (demo until Phase 3)
 };
 
 export const todayKey = (d = new Date()) => d.toLocaleDateString("en-CA");
@@ -91,12 +95,29 @@ function emptyData(): AppData {
   return {
     role: null,
     setupComplete: false,
+    myName: "",
     parentName: "",
     deadline: "11:00",
     timezone: deviceTimezone(),
     contacts: [],
     checkins: {},
+    watchedCheckins: {},
   };
+}
+
+/* Upgrade data saved by older versions of the app to the current shape. */
+function migrate(loaded: AppData): AppData {
+  const d = { ...emptyData(), ...loaded };
+  if (d.role === "parent" && !d.myName && d.parentName) d.myName = d.parentName;
+  if (
+    d.role === "family" &&
+    Object.keys(d.watchedCheckins).length === 0 &&
+    Object.keys(d.checkins).length > 0
+  ) {
+    d.watchedCheckins = d.checkins;
+    d.checkins = {};
+  }
+  return d;
 }
 
 /* Demo history so the family dashboard looks alive in Phase 1.
@@ -135,7 +156,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     (async () => {
       try {
         const raw = await AsyncStorage.getItem(KEY);
-        setData(raw ? { ...emptyData(), ...JSON.parse(raw) } : emptyData());
+        setData(raw ? migrate(JSON.parse(raw)) : emptyData());
       } catch {
         setData(emptyData());
       }

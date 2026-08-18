@@ -1,20 +1,14 @@
 import { useState } from "react";
-import {
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Chip, DeadlinePicker, GhostButton, Kicker } from "../components/ui";
+import { RoleTabs, SettingsButton } from "../components/chrome";
+import { GhostButton, Kicker } from "../components/ui";
 import {
   calcStreak,
   checkInTime,
   dateNDaysAgo,
   deadlineToday,
   fmtTime,
-  seedCheckins,
   todayKey,
   usualTime,
   useStore,
@@ -23,11 +17,12 @@ import {
 import { F, MOODS, T } from "../lib/theme";
 
 export default function FamilyDash() {
-  const { data, update, resetAll } = useStore();
+  const { data } = useStore();
   const [simMissed, setSimMissed] = useState(false);
   if (!data) return null;
 
-  const realRec = data.checkins[todayKey()];
+  const history = data.watchedCheckins;
+  const realRec = history[todayKey()];
   const rec = simMissed ? undefined : realRec;
   const dl = deadlineToday(data.deadline);
   const pastDeadline = simMissed || new Date() > dl;
@@ -36,7 +31,7 @@ export default function FamilyDash() {
     : pastDeadline
       ? "missed"
       : "waiting";
-  const streak = simMissed ? 0 : calcStreak(data.checkins);
+  const streak = simMissed ? 0 : calcStreak(history);
   const name = data.parentName || "Your parent";
   const backup = data.contacts.find((c) => !c.isPrimary);
 
@@ -52,7 +47,7 @@ export default function FamilyDash() {
     days.push({
       k,
       letter: d.toLocaleDateString([], { weekday: "narrow" }),
-      rec: n === 0 && simMissed ? undefined : data.checkins[k],
+      rec: n === 0 && simMissed ? undefined : history[k],
       isToday: n === 0,
     });
   }
@@ -72,7 +67,7 @@ export default function FamilyDash() {
       border: T.sunDeep,
       title: "No check-in yet this morning",
       sub: `Nothing to worry about until ${fmtTime(dl)} — the usual time is ${usualTime(
-        data.checkins
+        history
       )}.`,
     },
     missed: {
@@ -100,9 +95,10 @@ export default function FamilyDash() {
 
   return (
     <SafeAreaView style={styles.safe}>
+      <SettingsButton />
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.card}>
-          <Kicker text="Your phone" />
+          <Kicker text="Watching over" />
           <Text style={styles.h2}>{name}'s mornings</Text>
 
           {/* Today's status */}
@@ -173,58 +169,21 @@ export default function FamilyDash() {
           {/* Stats */}
           <View style={styles.statRow}>
             <Stat label="Streak" value={`${streak} days`} />
-            <Stat label="Usual time" value={usualTime(data.checkins)} />
+            <Stat label="Usual time" value={usualTime(history)} />
             <Stat label="Deadline" value={fmtTime(dl)} />
           </View>
 
-          {/* Settings */}
-          <Text style={styles.sectionLabel}>SETTINGS</Text>
-          <View style={styles.settingsRow}>
-            <View style={{ flex: 1, marginRight: 12 }}>
-              <Text style={styles.settingLabel}>Parent's name</Text>
-              <TextInput
-                value={data.parentName}
-                onChangeText={(v) => update({ parentName: v })}
-                style={styles.input}
-                placeholderTextColor={T.inkSoft}
-              />
-            </View>
-            <View>
-              <Text style={styles.settingLabel}>Check-in deadline</Text>
-              <DeadlinePicker
-                value={data.deadline}
-                onChange={(v) => update({ deadline: v })}
-              />
-            </View>
-          </View>
-          <View style={styles.chipsRow}>
-            {data.contacts.map((c) => (
-              <Chip
-                key={c.phone + c.name}
-                text={`${c.name} (${c.isPrimary ? "primary" : "backup"})`}
-              />
-            ))}
-            <Text style={styles.chipsNote}>alert contacts</Text>
-          </View>
-          <Text style={styles.tzNote}>
-            Deadline is in {data.timezone} — {name}'s timezone.
-          </Text>
-
           {/* Demo controls */}
           <View style={styles.demoRow}>
-            <Text style={styles.demoLabel}>DEMO CONTROLS</Text>
+            <Text style={styles.demoLabel}>DEMO</Text>
             <GhostButton
               label={simMissed ? "End simulation" : "Simulate a missed morning"}
               onPress={() => setSimMissed(!simMissed)}
             />
-            <GhostButton label="Reset app" onPress={resetAll} />
-            <GhostButton
-              label="Re-seed demo history"
-              onPress={() => update({ checkins: seedCheckins() })}
-            />
           </View>
         </View>
       </ScrollView>
+      <RoleTabs />
     </SafeAreaView>
   );
 }
@@ -240,7 +199,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: T.sky },
-  scroll: { padding: 16, paddingBottom: 60 },
+  scroll: { padding: 16, paddingTop: 46, paddingBottom: 24 },
   card: {
     backgroundColor: T.paper,
     borderRadius: 30,
@@ -298,7 +257,7 @@ const styles = StyleSheet.create({
   },
   dayMark: { fontFamily: F.serif, fontSize: 17 },
   dayLetter: { fontFamily: F.body, fontSize: 11, color: T.inkSoft, marginTop: 4 },
-  statRow: { flexDirection: "row", gap: 12, marginBottom: 22 },
+  statRow: { flexDirection: "row", gap: 12, marginBottom: 4 },
   stat: {
     flex: 1,
     backgroundColor: T.panel,
@@ -310,23 +269,8 @@ const styles = StyleSheet.create({
   },
   statLabel: { fontFamily: F.bold, fontSize: 12, color: T.inkSoft },
   statValue: { fontFamily: F.extra, fontSize: 18, color: T.ink, marginTop: 2 },
-  settingsRow: { flexDirection: "row", alignItems: "flex-end", marginBottom: 12 },
-  settingLabel: { fontFamily: F.body, fontSize: 14, color: T.ink, marginBottom: 6 },
-  input: {
-    borderWidth: 1.5,
-    borderColor: T.line,
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    fontSize: 15,
-    fontFamily: F.body,
-    color: T.ink,
-  },
-  chipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, alignItems: "center" },
-  chipsNote: { fontFamily: F.body, fontSize: 13, color: T.inkSoft },
-  tzNote: { fontFamily: F.body, fontSize: 13, color: T.inkSoft, marginTop: 10 },
   demoRow: {
-    marginTop: 22,
+    marginTop: 18,
     paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: T.line,

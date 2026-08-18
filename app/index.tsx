@@ -25,8 +25,10 @@ export default function Index() {
     );
   }
 
-  if (data.role === "family" && data.setupComplete) return <Redirect href="/family" />;
-  if (data.role === "parent" && data.setupComplete)
-    return <Redirect href="/parent-home" />;
+  if (data.setupComplete) {
+    if (data.role === "family") return <Redirect href="/family" />;
+    if (data.role === "parent" || data.role === "both")
+      return <Redirect href="/parent-home" />;
+  }
   return <Redirect href="/welcome" />;
 }

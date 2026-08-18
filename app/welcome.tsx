@@ -35,6 +35,15 @@ export default function Welcome() {
             router.push("/parent-join");
           }}
         />
+        <BigButton
+          label="I'm doing both"
+          sub="I check in, and I watch over someone too"
+          tone="secondary"
+          onPress={() => {
+            update({ role: "both" });
+            router.push("/setup/parent-info");
+          }}
+        />
         <View style={{ flex: 1 }} />
       </View>
     </SafeAreaView>

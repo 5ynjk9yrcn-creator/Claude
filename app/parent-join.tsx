@@ -18,7 +18,7 @@ import { F, T } from "../lib/theme";
 export default function ParentJoin() {
   const router = useRouter();
   const { data, update } = useStore();
-  const [name, setName] = useState(data?.parentName ?? "");
+  const [name, setName] = useState(data?.myName ?? "");
   const canGo = name.trim().length > 0;
 
   return (
@@ -50,7 +50,7 @@ export default function ParentJoin() {
             tone={canGo ? "primary" : "secondary"}
             onPress={() => {
               if (!canGo) return;
-              update({ parentName: name.trim(), setupComplete: true });
+              update({ myName: name.trim(), setupComplete: true });
               router.replace("/parent-home");
             }}
           />
