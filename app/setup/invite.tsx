@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Share, StyleSheet, Text, View } from "react-native";
 import { SetupFrame } from "../../components/SetupFrame";
 import { Button, Card, ErrorNote, GhostButton } from "../../components/ui";
-import { formatInviteCode, useStore } from "../../lib/store";
+import { formatInviteCode, inviteLink, useStore } from "../../lib/store";
 import { F, R, S, T, shadow, type as ty } from "../../lib/theme";
 
 /* Final setup step: the circle is saved to the cloud here, and the real
@@ -37,8 +37,8 @@ export default function Invite() {
 
   const message =
     `Hi ${parentName}! I set up OK Today so you can let me know you're OK each ` +
-    `morning with one tap. Get the app, choose “I'm checking in”, and enter this ` +
-    `code: ${code}. — ${primary}`;
+    `morning with one tap. Open this and you're all set: ` +
+    `${inviteLink(data?.inviteCode ?? "")}  (code: ${code}) — ${primary}`;
 
   const finish = () => router.replace("/");
 
@@ -67,7 +67,10 @@ export default function Invite() {
           <View style={[styles.codeCard, shadow(2)]}>
             <Text style={styles.codeLabel}>{parentName.toUpperCase()}'S CODE</Text>
             <Text style={styles.code}>{code}</Text>
-            <Text style={styles.codeHint}>They type this once — that's their whole setup.</Text>
+            <Text style={styles.codeHint}>
+              The link in the message below does this for them — the code is the
+              backup if they'd rather type it.
+            </Text>
           </View>
 
           <Text style={styles.previewLabel}>YOUR MESSAGE</Text>

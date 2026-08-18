@@ -8,6 +8,7 @@ import {
   ScrollView,
   Share,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -21,8 +22,17 @@ import {
   SectionLabel,
   Tappable,
 } from "../components/ui";
-import { fmtDeadline, formatInviteCode, useStore, type Contact } from "../lib/store";
+import { LANGS } from "../lib/i18n";
+import {
+  fmtDeadline,
+  formatInviteCode,
+  inviteLink,
+  useStore,
+  type Contact,
+} from "../lib/store";
 import { F, R, S, T, shadow, type as ty } from "../lib/theme";
+
+const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 export default function Settings() {
   const router = useRouter();
@@ -31,6 +41,8 @@ export default function Settings() {
   // Drafts commit on blur, so we don't hit the server on every keystroke.
   const [myName, setMyName] = useState(data?.myName ?? "");
   const [parentName, setParentName] = useState(data?.parentName ?? "");
+  const [parentPhone, setParentPhone] = useState(data?.parentPhone ?? "");
+  const [emergency, setEmergency] = useState(data?.emergencyNote ?? "");
   const [contacts, setContacts] = useState<Contact[]>([
     data?.contacts[0] ?? { name: "", phone: "", isPrimary: true },
     data?.contacts[1] ?? { name: "", phone: "", isPrimary: false },
@@ -41,6 +53,7 @@ export default function Settings() {
   const checksIn = data.role === "parent" || data.role === "both";
   const displayParent = data.parentName || "your parent";
   const code = data.inviteCode ? formatInviteCode(data.inviteCode) : null;
+  const perDay = data.deadlines !== null;
 
   const commitContacts = () =>
     saveSettings({
@@ -48,6 +61,22 @@ export default function Settings() {
         .filter((c) => c.name.trim() || c.phone.trim())
         .map((c, i) => ({ ...c, isPrimary: i === 0 })),
     });
+
+  const togglePerDay = (on: boolean) => {
+    if (on) {
+      const seed: Record<string, string> = {};
+      for (let i = 0; i < 7; i++) seed[String(i)] = data.deadline;
+      saveSettings({ deadlines: seed });
+    } else {
+      saveSettings({ deadlines: null });
+    }
+  };
+
+  const setDayDeadline = (day: number, value: string) => {
+    const next = { ...(data.deadlines ?? {}) };
+    next[String(day)] = value;
+    saveSettings({ deadlines: next });
+  };
 
   const confirmReset = () =>
     Alert.alert(
@@ -73,8 +102,8 @@ export default function Settings() {
       await Share.share({
         message:
           `Hi ${displayParent}! I set up OK Today so you can let me know you're OK ` +
-          `each morning with one tap. Get the app, choose “I'm checking in”, and ` +
-          `enter this code: ${code}. — ${from}`,
+          `each morning with one tap. Open this and you're all set: ` +
+          `${inviteLink(data.inviteCode ?? "")}  (code: ${code}) — ${from}`,
       });
     } catch {
       /* user closed the share sheet */
@@ -108,7 +137,7 @@ export default function Settings() {
             <FadeIn>
               <SectionLabel text="My check-in" />
               <Card padded={false} style={styles.group}>
-                <Row icon="person-outline" label="My name">
+                <Row icon="person-outline" label="My name" last>
                   <TextInput
                     value={myName}
                     onChangeText={setMyName}
@@ -118,24 +147,17 @@ export default function Settings() {
                     placeholderTextColor={T.inkFaint}
                   />
                 </Row>
-                {data.role === "parent" && (
-                  <Row icon="flag-outline" label="Deadline" last>
-                    <Text style={styles.rowValue}>{fmtDeadline(data.deadline)}</Text>
-                  </Row>
-                )}
               </Card>
-              {data.role === "parent" && (
-                <Text style={styles.note}>
-                  Your family sets the deadline from their phone.
-                </Text>
-              )}
             </FadeIn>
           )}
 
           {watches && (
             <>
               <FadeIn delay={50}>
-                <SectionLabel text={`Watching over ${displayParent}`} style={{ marginTop: S.xxl }} />
+                <SectionLabel
+                  text={`Watching over ${displayParent}`}
+                  style={{ marginTop: S.xxl }}
+                />
                 <Card padded={false} style={styles.group}>
                   <Row icon="person-outline" label="Their name">
                     <TextInput
@@ -147,20 +169,60 @@ export default function Settings() {
                       placeholderTextColor={T.inkFaint}
                     />
                   </Row>
-                  <Row icon="flag-outline" label="Daily deadline" last>
-                    <DeadlinePicker
-                      value={data.deadline}
-                      onChange={(v) => saveSettings({ deadline: v })}
+                  <Row icon="call-outline" label="Their phone" last>
+                    <TextInput
+                      value={parentPhone}
+                      onChangeText={setParentPhone}
+                      onEndEditing={() => saveSettings({ parentPhone: parentPhone.trim() })}
+                      style={styles.rowInput}
+                      placeholder="For the Call button"
+                      placeholderTextColor={T.inkFaint}
+                      keyboardType="phone-pad"
                     />
                   </Row>
                 </Card>
                 <Text style={styles.note}>
-                  Alerts begin if {displayParent} hasn't checked in by{" "}
-                  {fmtDeadline(data.deadline)}. Times follow {data.timezone}.
+                  Their number gives you a one-tap Call button when a morning is missed,
+                  and is included in the alert texts.
                 </Text>
               </FadeIn>
 
-              <FadeIn delay={90}>
+              <FadeIn delay={80}>
+                <SectionLabel text="Deadline" style={{ marginTop: S.xxl }} />
+                <Card padded={false} style={styles.group}>
+                  {!perDay && (
+                    <Row icon="flag-outline" label="Every day at">
+                      <DeadlinePicker
+                        value={data.deadline}
+                        onChange={(v) => saveSettings({ deadline: v })}
+                      />
+                    </Row>
+                  )}
+                  <Row icon="calendar-outline" label="Different on some days" last={!perDay}>
+                    <Switch
+                      value={perDay}
+                      onValueChange={togglePerDay}
+                      trackColor={{ true: T.leaf, false: T.line }}
+                    />
+                  </Row>
+                  {perDay &&
+                    DAY_NAMES.map((dn, i) => (
+                      <Row key={dn} icon="ellipse-outline" label={dn} last={i === 6}>
+                        <DeadlinePicker
+                          value={data.deadlines?.[String(i)] ?? data.deadline}
+                          onChange={(v) => setDayDeadline(i, v)}
+                        />
+                      </Row>
+                    ))}
+                </Card>
+                <Text style={styles.note}>
+                  {perDay
+                    ? "Weekends and church mornings are the usual reason to differ — a deadline that fits real life means far fewer false alarms."
+                    : `Alerts begin if ${displayParent} hasn't checked in by ${fmtDeadline(data.deadline)}. Times follow ${data.timezone}.`}
+                </Text>
+              </FadeIn>
+
+              <FadeIn delay={110}>
                 <SectionLabel text="Alert contacts" style={{ marginTop: S.xxl }} />
                 <Card>
                   {[0, 1].map((i) => (
@@ -196,7 +258,53 @@ export default function Settings() {
                 </Card>
               </FadeIn>
 
-              <FadeIn delay={130}>
+              <FadeIn delay={140}>
+                <SectionLabel text="In case of emergency" style={{ marginTop: S.xxl }} />
+                <Card>
+                  <TextInput
+                    value={emergency}
+                    onChangeText={setEmergency}
+                    onEndEditing={() => saveSettings({ emergencyNote: emergency.trim() })}
+                    style={styles.areaInput}
+                    placeholder={"e.g. 14 Elm St, apt 3B. Door code 4417.\nNeighbour Jane: 416 555 0199."}
+                    placeholderTextColor={T.inkFaint}
+                    multiline
+                    maxLength={300}
+                  />
+                  <Text style={[ty.small, { marginTop: S.md }]}>
+                    Shown on your dashboard the moment a morning is missed, and included
+                    in the alert texts — so whoever gets one can actually help.
+                  </Text>
+                </Card>
+              </FadeIn>
+
+              <FadeIn delay={170}>
+                <SectionLabel text={`${displayParent}'s language`} style={{ marginTop: S.xxl }} />
+                <Card>
+                  <View style={styles.langRow}>
+                    {LANGS.map((l) => {
+                      const on = (data.lang || "en") === l.code;
+                      return (
+                        <Tappable
+                          key={l.code}
+                          onPress={() => saveSettings({ lang: l.code })}
+                          accessibilityLabel={l.label}
+                          style={[styles.langPill, on ? styles.langPillOn : null]}
+                        >
+                          <Text style={[styles.langText, on ? { color: T.paper } : null]}>
+                            {l.label}
+                          </Text>
+                        </Tappable>
+                      );
+                    })}
+                  </View>
+                  <Text style={[ty.small, { marginTop: S.md }]}>
+                    Changes only {displayParent}'s screens — yours stay in English.
+                  </Text>
+                </Card>
+              </FadeIn>
+
+              <FadeIn delay={200}>
                 <SectionLabel text="Invite" style={{ marginTop: S.xxl }} />
                 <Card>
                   {code && (
@@ -211,30 +319,30 @@ export default function Settings() {
                     onPress={inviteAgain}
                   />
                   <Text style={[styles.note, { marginTop: S.md, marginLeft: 0 }]}>
-                    They enter this code once under “I'm checking in” and their phone
-                    is fully set up.
+                    The link sets up their phone in one tap. The code is there too, in
+                    case they'd rather type it.
                   </Text>
                 </Card>
               </FadeIn>
             </>
           )}
 
-          <FadeIn delay={170}>
+          <FadeIn delay={230}>
             <SectionLabel text="Notifications" style={{ marginTop: S.xxl }} />
             <Card>
               <View style={styles.infoRow}>
                 <Ionicons name="notifications-outline" size={18} color={T.inkSoft} />
                 <Text style={[ty.small, { flex: 1 }]}>
-                  Reminders{checksIn ? " for you" : ` for ${displayParent}`} an hour
-                  before the deadline, and alert texts when a morning is missed, run
-                  from our server — not from this phone. Text delivery switches on
-                  with Twilio; phone alerts with the TestFlight build.
+                  Reminders{checksIn ? " for you" : ` for ${displayParent}`} an hour before
+                  the deadline, and alert texts when a morning is missed, run from our
+                  server — not from this phone. Text delivery switches on with Twilio;
+                  phone alerts with the TestFlight build.
                 </Text>
               </View>
             </Card>
           </FadeIn>
 
-          <FadeIn delay={200}>
+          <FadeIn delay={260}>
             <SectionLabel text="Account" style={{ marginTop: S.xxl }} />
             <Card>
               <GhostButton
@@ -306,13 +414,12 @@ const styles = StyleSheet.create({
   rowBorder: { borderBottomWidth: 1, borderBottomColor: T.lineSoft },
   rowLabel: { fontFamily: F.semi, fontSize: 16, color: T.ink, flex: 1 },
   rowRight: { alignItems: "flex-end", flex: 1.1 },
-  rowValue: { fontFamily: F.bold, fontSize: 16, color: T.inkSoft },
   rowInput: {
     fontFamily: F.bold,
     fontSize: 16,
     color: T.ink,
     textAlign: "right",
-    minWidth: 120,
+    minWidth: 130,
     paddingVertical: 2,
   },
 
@@ -338,6 +445,29 @@ const styles = StyleSheet.create({
     color: T.ink,
     backgroundColor: T.paper,
   },
+  areaInput: {
+    borderWidth: 1.5,
+    borderColor: T.line,
+    borderRadius: R.md,
+    padding: S.md,
+    minHeight: 88,
+    fontSize: 15.5,
+    fontFamily: F.body,
+    color: T.ink,
+    textAlignVertical: "top",
+  },
+
+  langRow: { flexDirection: "row", flexWrap: "wrap", gap: S.sm },
+  langPill: {
+    borderWidth: 1.5,
+    borderColor: T.line,
+    borderRadius: R.pill,
+    paddingVertical: 8,
+    paddingHorizontal: S.lg,
+    backgroundColor: T.paper,
+  },
+  langPillOn: { backgroundColor: T.ink, borderColor: T.ink },
+  langText: { fontFamily: F.bold, fontSize: 14, color: T.ink },
 
   codeCard: {
     backgroundColor: T.sunPale,
@@ -348,25 +478,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: S.lg,
   },
-  codeLabel: {
-    fontFamily: F.extra,
-    fontSize: 10,
-    letterSpacing: 1.5,
-    color: T.sunDeep,
-  },
-  code: {
-    fontFamily: F.extra,
-    fontSize: 26,
-    letterSpacing: 3,
-    color: T.ink,
-    marginTop: 3,
-  },
+  codeLabel: { fontFamily: F.extra, fontSize: 10, letterSpacing: 1.5, color: T.sunDeep },
+  code: { fontFamily: F.extra, fontSize: 26, letterSpacing: 3, color: T.ink, marginTop: 3 },
 
   infoRow: { flexDirection: "row", gap: S.md, alignItems: "flex-start" },
-  version: {
-    ...ty.small,
-    textAlign: "center",
-    marginTop: S.xl,
-    color: T.inkFaint,
-  },
+  version: { ...ty.small, textAlign: "center", marginTop: S.xl, color: T.inkFaint },
 });

@@ -37,7 +37,29 @@ type Circle = {
   owner_id: string;
   test_deadline_at: string | null;
   is_self: boolean;
+  deadlines: Record<string, string> | null;
+  parent_phone: string;
+  emergency_note: string;
+  lang: string;
+  ack_day: string | null;
 };
+
+/* Reminder wording in the parent's language — the only push they ever see. */
+const REMINDER: Record<string, { title: string; body: (t: string) => string }> = {
+  en: { title: "Good morning ☀", body: (t) => `Don't forget to tap your sun before ${t}.` },
+  fr: { title: "Bonjour ☀", body: (t) => `N'oubliez pas de toucher votre soleil avant ${t}.` },
+  es: { title: "Buenos días ☀", body: (t) => `No olvide tocar su sol antes de las ${t}.` },
+  pt: { title: "Bom dia ☀", body: (t) => `Não esqueça de tocar no seu sol antes das ${t}.` },
+  it: { title: "Buongiorno ☀", body: (t) => `Non dimenticare di toccare il tuo sole prima delle ${t}.` },
+  de: { title: "Guten Morgen ☀", body: (t) => `Denken Sie daran, vor ${t} auf Ihre Sonne zu tippen.` },
+  zh: { title: "早上好 ☀", body: (t) => `别忘了在 ${t} 之前点一下您的太阳。` },
+};
+
+const reminderText = (lang: string, time: string) =>
+  (REMINDER[(lang ?? "en").slice(0, 2)] ?? REMINDER.en);
+
+/* Weekday index (0=Sunday) for a YYYY-MM-DD key. */
+const weekdayOf = (dayKey: string) => new Date(`${dayKey}T12:00:00Z`).getUTCDay();
 
 /* Minutes from `now` until `target`, wrapping across midnight so a deadline
    soon after midnight still gets its hour-before reminder the evening prior. */
@@ -196,6 +218,15 @@ async function setStatus(
     });
 }
 
+/* Everything the recipient needs to actually do something, appended to an
+   alert text: who to call, and whatever the family wrote down in advance. */
+function helpBlock(c: Circle): string {
+  const bits: string[] = [];
+  if (c.parent_phone?.trim()) bits.push(`Call them: ${c.parent_phone.trim()}`);
+  if (c.emergency_note?.trim()) bits.push(c.emergency_note.trim());
+  return bits.length ? ` ${bits.join(" · ")}` : " Please check on them.";
+}
+
 Deno.serve(async (req) => {
   if (req.headers.get("x-cron-key") !== CRON_SECRET) {
     return new Response("unauthorized", { status: 401 });
@@ -229,7 +260,8 @@ Deno.serve(async (req) => {
     const { data: circles, error: cErr } = await admin
       .from("circles")
       .select(
-        "id, parent_name, deadline, timezone, parent_user_id, owner_id, test_deadline_at, is_self"
+        "id, parent_name, deadline, timezone, parent_user_id, owner_id, test_deadline_at, " +
+          "is_self, deadlines, parent_phone, emergency_note, lang, ack_day"
       );
     if (cErr) throw new Error(cErr.message);
 
@@ -238,9 +270,18 @@ Deno.serve(async (req) => {
       circlesChecked++;
 
       const { date: today, minutes: nowM } = localParts(c.timezone);
-      const [dh, dm] = c.deadline.split(":").map(Number);
+      // Per-weekday override, falling back to the single daily deadline.
+      const todaysDeadline = c.deadlines?.[String(weekdayOf(today))] ?? c.deadline;
+      const [dh, dm] = todaysDeadline.split(":").map(Number);
       const dlM = dh * 60 + dm;
       const dlText = fmtLocal(c.timezone, dlM);
+      const acked = c.ack_day === today;
+
+      // Heartbeat: proof to the family that the watcher is alive right now.
+      await admin
+        .from("circles")
+        .update({ last_checked_at: new Date().toISOString() })
+        .eq("id", c.id);
 
       const { data: checkin } = await admin
         .from("checkins")
@@ -280,8 +321,8 @@ Deno.serve(async (req) => {
           await send("reminder", "push", "parent", tag, () =>
             sendPush(
               c.parent_user_id,
-              "Good morning ☀ (test)",
-              `Don't forget to tap your sun — this is a test reminder.`
+              `${reminderText(c.lang, dlText).title} (test)`,
+              reminderText(c.lang, dlText).body(dlText)
             )
           );
         }
@@ -370,14 +411,21 @@ Deno.serve(async (req) => {
         await send("reminder", "push", "parent", "", () =>
           sendPush(
             c.parent_user_id,
-            "Good morning ☀",
-            `Don't forget to tap your sun before ${dlText}.`
+            reminderText(c.lang, dlText).title,
+            reminderText(c.lang, dlText).body(dlText)
           )
         );
       }
 
       // A self check-in circle has no one to escalate to — reminders only.
       if (c.is_self) continue;
+
+      // "I've got it": the family is handling this morning. Log it once and
+      // send nothing further today.
+      if (acked) {
+        await send("ack", "push", "owner", "", async () => ({ ok: true }));
+        continue;
+      }
 
       if (nowM >= dlM) {
         await send("primary", "push", "owner", "", () =>
@@ -391,7 +439,8 @@ Deno.serve(async (req) => {
           await send("primary", "sms", primary.phone, "", () =>
             sendSms(
               primary.phone,
-              `OK Today: ${c.parent_name} hasn't checked in today (deadline was ${dlText}). Please check on them.`
+              `OK Today: ${c.parent_name} hasn't checked in today (deadline was ${dlText}).` +
+                helpBlock(c)
             )
           );
         }

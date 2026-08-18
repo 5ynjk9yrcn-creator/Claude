@@ -22,11 +22,19 @@ type Props = {
   size?: number; // diameter of the sun disc
   tapped: boolean;
   onTap?: () => void;
+  labelIdle?: string; // localised — the parent may not read English
+  labelDone?: string;
 };
 
 /* The one-tap sun. Idle it breathes softly so the screen feels alive;
    pressing springs it; checking in fires a halo burst and a haptic thump. */
-export function Sun({ size = 236, tapped, onTap }: Props) {
+export function Sun({
+  size = 236,
+  tapped,
+  onTap,
+  labelIdle = "I'm OK today",
+  labelDone = "Checked in ✓",
+}: Props) {
   const canvas = size + 2 * (RAY_GAP + RAY_LEN) + 10;
   const c = canvas / 2;
 
@@ -212,7 +220,7 @@ export function Sun({ size = 236, tapped, onTap }: Props) {
               style={[styles.label, { fontSize: size * 0.15, maxWidth: size - 40 }]}
               maxFontSizeMultiplier={1.3}
             >
-              {tapped ? "Checked in ✓" : "I'm OK today"}
+              {tapped ? labelDone : labelIdle}
             </Text>
           </View>
         </Pressable>

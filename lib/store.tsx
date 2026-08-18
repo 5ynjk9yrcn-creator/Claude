@@ -40,14 +40,20 @@ export type AppData = {
   checkins: Record<string, CheckIn>; // this phone's own check-ins, key YYYY-MM-DD
   watchedCheckins: Record<string, CheckIn>; // the watched person's history
   pendingDays: Record<string, CheckIn>; // own check-ins not yet synced
-  loveForMe: { day: string; from: string } | null; // latest ❤ sent to this phone's parent
-  loveSentDay: string | null; // last day this phone sent a ❤ to its watched circle
+  loveForMe: { day: string; from: string; message: string | null } | null;
+  loveSentDay: string | null; // last day this phone sent a ❤/note to its watched circle
+  deadlines: Record<string, string> | null; // per-weekday overrides, 0=Sun
+  parentPhone: string;
+  emergencyNote: string;
+  lang: string;
+  ackDay: string | null; // day the family said "I've got it"
+  lastCheckedAt: string | null; // heartbeat: when the server last ran this circle
   todaysAlerts: AlertRow[]; // what the escalation system did today (watched circle)
   testDeadlineAt: string | null; // when a test alarm is running, its fake deadline
 };
 
 export type AlertRow = {
-  kind: "reminder" | "primary" | "backup" | "allclear" | "notgreat";
+  kind: "reminder" | "primary" | "backup" | "allclear" | "notgreat" | "ack";
   channel: "push" | "sms";
   target: string;
   status: string;
@@ -158,6 +164,12 @@ export const checkInTime = (rec: CheckIn, tz?: string) =>
 export const formatInviteCode = (code: string) =>
   code.length === 8 ? `${code.slice(0, 4)}-${code.slice(4)}` : code;
 
+/* A tappable link for the invite text. It opens a small page that hands the
+   code straight to the app when it's installed, and explains how to get the
+   app when it isn't — so the parent never types anything. */
+export const inviteLink = (code: string) =>
+  `https://lotbohsxmttxxropegkt.supabase.co/functions/v1/join?c=${code}`;
+
 function deviceTimezone(): string {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone ?? "America/Toronto";
@@ -183,6 +195,12 @@ function emptyData(): AppData {
     pendingDays: {},
     loveForMe: null,
     loveSentDay: null,
+    deadlines: null,
+    parentPhone: "",
+    emergencyNote: "",
+    lang: "en",
+    ackDay: null,
+    lastCheckedAt: null,
     todaysAlerts: [],
     testDeadlineAt: null,
   };
@@ -198,6 +216,12 @@ type CircleRow = {
   invite_code: string;
   is_self: boolean;
   test_deadline_at: string | null;
+  deadlines: Record<string, string> | null;
+  parent_phone: string;
+  emergency_note: string;
+  lang: string;
+  ack_day: string | null;
+  last_checked_at: string | null;
 };
 
 type Store = {
@@ -218,8 +242,13 @@ type Store = {
     deadline?: string;
     myName?: string;
     contacts?: Contact[];
+    deadlines?: Record<string, string> | null;
+    parentPhone?: string;
+    emergencyNote?: string;
+    lang?: string;
   }) => void;
-  sendLove: () => Promise<string | null>;
+  sendLove: (message?: string) => Promise<string | null>;
+  acknowledge: () => Promise<string | null>;
   startTestAlarm: () => Promise<string | null>;
   refresh: () => Promise<void>;
   eraseEverything: () => Promise<void>;
@@ -377,8 +406,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const server = await loadCheckins(checkinCircle.id);
         // Anything still queued locally beats the server copy.
         next.checkins = { ...server, ...next.pendingDays };
+        next.lang = checkinCircle.lang ?? "en";
         if (!watchCircle) {
           next.deadline = checkinCircle.deadline.slice(0, 5);
+          next.deadlines = checkinCircle.deadlines ?? null;
           next.timezone = checkinCircle.timezone;
         }
       }
@@ -389,6 +420,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         next.timezone = watchCircle.timezone;
         next.inviteCode = watchCircle.invite_code;
         next.contacts = contacts;
+        next.deadlines = watchCircle.deadlines ?? null;
+        next.parentPhone = watchCircle.parent_phone ?? "";
+        next.emergencyNote = watchCircle.emergency_note ?? "";
+        next.lang = watchCircle.lang ?? "en";
+        next.ackDay = watchCircle.ack_day ?? null;
+        next.lastCheckedAt = watchCircle.last_checked_at ?? null;
         next.watchedCheckins = await loadCheckins(watchCircle.id);
       }
 
@@ -398,13 +435,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (checkinCircle) {
         const { data: lv } = await supabase
           .from("loves")
-          .select("day, from_name")
+          .select("day, from_name, message")
           .eq("circle_id", checkinCircle.id)
           .gte("day", loveSince)
           .order("day", { ascending: false })
           .limit(1);
         next.loveForMe = lv?.[0]
-          ? { day: lv[0].day as string, from: (lv[0].from_name as string) || "Your family" }
+          ? {
+              day: lv[0].day as string,
+              from: (lv[0].from_name as string) || "Your family",
+              message: (lv[0].message as string | null) ?? null,
+            }
           : null;
       }
       if (watchCircle) {
@@ -631,23 +672,42 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const saveSettings = useCallback(
-    (patch: { parentName?: string; deadline?: string; myName?: string; contacts?: Contact[] }) => {
+    (patch: {
+      parentName?: string;
+      deadline?: string;
+      myName?: string;
+      contacts?: Contact[];
+      deadlines?: Record<string, string> | null;
+      parentPhone?: string;
+      emergencyNote?: string;
+      lang?: string;
+    }) => {
       const cur = dataRef.current;
       if (!cur) return;
       const next = { ...cur, ...patch };
       persist(next);
       void (async () => {
-        if (next.watchCircleId && (patch.parentName !== undefined || patch.deadline !== undefined)) {
-          await supabase
-            .from("circles")
-            .update({ parent_name: next.parentName, deadline: next.deadline })
-            .eq("id", next.watchCircleId);
+        if (next.watchCircleId) {
+          const fields: Record<string, unknown> = {};
+          if (patch.parentName !== undefined) fields.parent_name = next.parentName;
+          if (patch.deadline !== undefined) fields.deadline = next.deadline;
+          if (patch.deadlines !== undefined) fields.deadlines = next.deadlines;
+          if (patch.parentPhone !== undefined) fields.parent_phone = next.parentPhone;
+          if (patch.emergencyNote !== undefined)
+            fields.emergency_note = next.emergencyNote;
+          if (patch.lang !== undefined) fields.lang = next.lang;
+          if (Object.keys(fields).length) {
+            await supabase.from("circles").update(fields).eq("id", next.watchCircleId);
+          }
         }
-        // "Both" accounts keep their own check-in circle on the same deadline.
-        if (next.checkinCircleId && patch.deadline !== undefined) {
+        // "Both" accounts keep their own check-in circle on the same schedule.
+        if (
+          next.checkinCircleId &&
+          (patch.deadline !== undefined || patch.deadlines !== undefined)
+        ) {
           await supabase
             .from("circles")
-            .update({ deadline: next.deadline })
+            .update({ deadline: next.deadline, deadlines: next.deadlines })
             .eq("id", next.checkinCircleId);
         }
         if (next.checkinCircleId && patch.myName !== undefined) {
@@ -688,18 +748,41 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return null;
   }, [update]);
 
-  const sendLove = useCallback(async (): Promise<string | null> => {
+  const sendLove = useCallback(
+    async (message?: string): Promise<string | null> => {
     const cur = dataRef.current;
     if (!cur?.watchCircleId) return "No circle to send to yet.";
     const from = cur.contacts.find((c) => c.isPrimary)?.name || "Your family";
     // Recorded against the parent's day, not the sender's.
     const day = dayKeyTz(cur.timezone);
     const { error } = await supabase.from("loves").upsert(
-      { circle_id: cur.watchCircleId, day, from_name: from },
-      { onConflict: "circle_id,day", ignoreDuplicates: true }
+      {
+        circle_id: cur.watchCircleId,
+        day,
+        from_name: from,
+        message: message?.trim() ? message.trim() : null,
+      },
+      { onConflict: "circle_id,day" }
     );
     if (error) return "Couldn't send it — check your internet and try again.";
     update({ loveSentDay: day });
+    return null;
+    },
+    [update]
+  );
+
+  /* "I've got it" — the family is handling this morning, so the server stops
+     escalating (no backup text) for the rest of the day. */
+  const acknowledge = useCallback(async (): Promise<string | null> => {
+    const cur = dataRef.current;
+    if (!cur?.watchCircleId) return "No circle to acknowledge yet.";
+    const day = dayKeyTz(cur.timezone);
+    const { error } = await supabase
+      .from("circles")
+      .update({ ack_day: day, ack_at: new Date().toISOString() })
+      .eq("id", cur.watchCircleId);
+    if (error) return "Couldn't reach the server — check your internet and try again.";
+    update({ ackDay: day });
     return null;
   }, [update]);
 
@@ -730,6 +813,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         claimInvite,
         saveSettings,
         sendLove,
+        acknowledge,
         startTestAlarm,
         refresh,
         eraseEverything,
@@ -744,4 +828,61 @@ export function useStore(): Store {
   const s = useContext(Ctx);
   if (!s) throw new Error("useStore must be used inside StoreProvider");
   return s;
+}
+
+/* ---- schedule + pattern helpers ---- */
+
+/** Weekday index (0=Sun) for a YYYY-MM-DD key, read as a plain local date. */
+export function weekdayOfKey(key: string): number {
+  return new Date(`${key}T12:00:00`).getDay();
+}
+
+/** The deadline that applies on a given day, honouring per-weekday overrides. */
+export function deadlineForKey(
+  d: Pick<AppData, "deadline" | "deadlines">,
+  dayKey: string
+): string {
+  return d.deadlines?.[String(weekdayOfKey(dayKey))] || d.deadline;
+}
+
+/** The deadline in force right now in the parent's timezone. */
+export function deadlineNow(
+  d: Pick<AppData, "deadline" | "deadlines">,
+  tz?: string
+): string {
+  return deadlineForKey(d, dayKeyTz(tz));
+}
+
+export type Drift = { minutesLater: number; recent: string; usual: string };
+
+/* Compare the last 7 mornings against the 3 weeks before them. A parent
+   drifting steadily later is the kind of slow change nobody notices day to
+   day — it is the earliest signal this app can offer. */
+export function detectDrift(
+  checkins: Record<string, CheckIn>,
+  tz?: string
+): Drift | null {
+  const minutesOf = (rec: CheckIn) => {
+    const [h, m] = fmtTimeTz24(new Date(rec.iso), tz).split(":").map(Number);
+    return h * 60 + m;
+  };
+  const recent: number[] = [];
+  const before: number[] = [];
+  for (let n = 0; n < 28; n++) {
+    const rec = checkins[dayKeyTzBack(tz, n)];
+    if (!rec) continue;
+    (n < 7 ? recent : before).push(minutesOf(rec));
+  }
+  if (recent.length < 4 || before.length < 7) return null; // not enough history
+  const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  const rAvg = avg(recent);
+  const bAvg = avg(before);
+  const delta = Math.round(rAvg - bAvg);
+  if (delta < 30) return null; // only flag a meaningful, sustained slide
+  const label = (mins: number) => {
+    const d = new Date();
+    d.setHours(Math.floor(mins / 60), Math.round(mins % 60), 0, 0);
+    return fmtTime(d);
+  };
+  return { minutesLater: delta, recent: label(rAvg), usual: label(bAvg) };
 }

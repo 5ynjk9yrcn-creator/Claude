@@ -1,7 +1,15 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useState } from "react";
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import {
+  Linking,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { RoleTabs } from "../components/chrome";
 import {
@@ -17,7 +25,9 @@ import {
   checkInTime,
   dayKeyTz,
   dayKeyTzBack,
+  deadlineNow,
   deadlineToday,
+  detectDrift,
   fmtTime,
   usualTime,
   useStore,
@@ -27,28 +37,40 @@ import {
 import { F, MOODS, R, S, T, shadow, type as ty } from "../lib/theme";
 
 export default function FamilyDash() {
-  const { data, refresh, sendLove, startTestAlarm } = useStore();
+  const { data, refresh, sendLove, acknowledge, startTestAlarm } = useStore();
   const router = useRouter();
   const [simMissed, setSimMissed] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [loveBusy, setLoveBusy] = useState(false);
+  const [ackBusy, setAckBusy] = useState(false);
   const [testBusy, setTestBusy] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
+  const [note, setNote] = useState("");
+  const [msg, setMsg] = useState<string | null>(null);
+  const [, tick] = useState(0);
+
+  // Keep the "checked N seconds ago" heartbeat honest between syncs.
+  useEffect(() => {
+    const iv = setInterval(() => tick((n) => n + 1), 15000);
+    return () => clearInterval(iv);
+  }, []);
+
   if (!data) return null;
 
-  // Everything on this screen is shown in the watched person's timezone,
-  // which may differ from the viewer's.
+  // Everything here is shown in the watched person's timezone.
   const tz = data.timezone;
+  const today = dayKeyTz(tz);
   const history = data.watchedCheckins;
-  const realRec = history[dayKeyTz(tz)];
-  const rec = simMissed ? undefined : realRec;
-  const dl = deadlineToday(data.deadline);
-  const pastDeadline = simMissed || minutesNowTz(tz) >= minutesOf(data.deadline);
+  const rec = simMissed ? undefined : history[today];
+  const todaysDeadline = deadlineNow(data, tz);
+  const dl = deadlineToday(todaysDeadline);
+  const pastDeadline = simMissed || minutesNowTz(tz) >= minutesOf(todaysDeadline);
   const status: "in" | "missed" | "waiting" = rec ? "in" : pastDeadline ? "missed" : "waiting";
   const streak = simMissed ? 0 : calcStreak(history, tz);
   const name = data.parentName || "Your parent";
-  const loveSent = data.loveSentDay === dayKeyTz(tz);
+  const sentToday = data.loveSentDay === today;
   const testActive = !!data.testDeadlineAt;
+  const acked = data.ackDay === today;
+  const drift = detectDrift(history, tz);
 
   const pullRefresh = async () => {
     setRefreshing(true);
@@ -56,22 +78,40 @@ export default function FamilyDash() {
     setRefreshing(false);
   };
 
-  const onSendLove = async () => {
-    if (loveBusy || loveSent) return;
+  const onSend = async (withNote: boolean) => {
+    if (loveBusy) return;
     setLoveBusy(true);
-    setNote(null);
-    const err = await sendLove();
+    setMsg(null);
+    const err = await sendLove(withNote ? note : undefined);
     setLoveBusy(false);
-    if (err) setNote(err);
+    if (err) setMsg(err);
+    else {
+      setNote("");
+      void refresh();
+    }
+  };
+
+  const onAck = async () => {
+    if (ackBusy || acked) return;
+    setAckBusy(true);
+    setMsg(null);
+    const err = await acknowledge();
+    setAckBusy(false);
+    if (err) setMsg(err);
   };
 
   const onStartTest = async () => {
     if (testBusy || testActive) return;
     setTestBusy(true);
-    setNote(null);
+    setMsg(null);
     const err = await startTestAlarm();
     setTestBusy(false);
-    if (err) setNote(err);
+    if (err) setMsg(err);
+  };
+
+  const callParent = () => {
+    const num = data.parentPhone.replace(/[^\d+]/g, "");
+    if (num) void Linking.openURL(`tel:${num}`);
   };
 
   const days: { k: string; letter: string; rec: CheckIn | undefined; isToday: boolean }[] = [];
@@ -79,7 +119,6 @@ export default function FamilyDash() {
     const k = dayKeyTzBack(tz, n);
     days.push({
       k,
-      // Parse as a plain local date so the weekday letter matches the key.
       letter: new Date(`${k}T12:00:00`).toLocaleDateString([], { weekday: "narrow" }),
       rec: n === 0 && simMissed ? undefined : history[k],
       isToday: n === 0,
@@ -111,8 +150,10 @@ export default function FamilyDash() {
       accent: T.clay,
       border: T.clayLine,
       icon: "alert-circle" as const,
-      title: `Missed check-in`,
-      sub: `Nothing since the ${fmtTime(dl)} deadline — alerts are going out.`,
+      title: "Missed check-in",
+      sub: acked
+        ? "You said you've got it — no further alerts will go out today."
+        : `Nothing since the ${fmtTime(dl)} deadline — alerts are going out.`,
     },
   }[status];
 
@@ -125,7 +166,7 @@ export default function FamilyDash() {
           <RefreshControl refreshing={refreshing} onRefresh={() => void pullRefresh()} tintColor={T.inkSoft} />
         }
       >
-        {/* Header */}
+        {/* Header + heartbeat */}
         <FadeIn>
           <View style={styles.header}>
             <Avatar name={name} size={48} />
@@ -143,16 +184,13 @@ export default function FamilyDash() {
               <Ionicons name="settings-outline" size={20} color={T.inkSoft} />
             </Tappable>
           </View>
+          <Heartbeat lastCheckedAt={data.lastCheckedAt} />
         </FadeIn>
 
         {/* Today's status */}
         <FadeIn delay={60}>
           <View
-            style={[
-              styles.hero,
-              { backgroundColor: cfg.tint, borderColor: cfg.border },
-              shadow(1),
-            ]}
+            style={[styles.hero, { backgroundColor: cfg.tint, borderColor: cfg.border }, shadow(1)]}
           >
             <View style={styles.heroTop}>
               <View style={[styles.heroIcon, { backgroundColor: cfg.accent + "1F" }]}>
@@ -164,28 +202,108 @@ export default function FamilyDash() {
               </View>
             </View>
 
-            {status === "in" && !simMissed && (
-              <Tappable
-                onPress={() => void onSendLove()}
-                disabled={loveSent || loveBusy}
-                haptic="medium"
-                accessibilityLabel={loveSent ? "Heart already sent today" : `Send ${name} a heart`}
-                style={[styles.loveBtn, loveSent ? styles.loveBtnSent : null]}
-              >
-                <Text style={styles.loveBtnText}>
-                  {loveSent
-                    ? `❤️  Sent — it'll greet ${name} on their sun`
-                    : loveBusy
-                      ? "Sending…"
-                      : `❤️  Send ${name} a heart`}
-                </Text>
-              </Tappable>
+            {status === "missed" && !simMissed && (
+              <View style={styles.actionRow}>
+                {!!data.parentPhone && (
+                  <Tappable
+                    onPress={callParent}
+                    haptic="medium"
+                    accessibilityLabel={`Call ${name}`}
+                    style={[styles.actionBtn, styles.actionPrimary]}
+                  >
+                    <View style={styles.actionInner}>
+                      <Ionicons name="call" size={17} color={T.paper} />
+                      <Text style={[styles.actionText, { color: T.paper }]}>
+                        Call {name}
+                      </Text>
+                    </View>
+                  </Tappable>
+                )}
+                <Tappable
+                  onPress={() => void onAck()}
+                  disabled={acked || ackBusy}
+                  haptic="medium"
+                  accessibilityLabel="I've got it — stop further alerts today"
+                  style={[styles.actionBtn, acked ? styles.actionDone : styles.actionGhost]}
+                >
+                  <View style={styles.actionInner}>
+                    <Ionicons
+                      name={acked ? "checkmark-circle" : "hand-left-outline"}
+                      size={17}
+                      color={T.clay}
+                    />
+                    <Text style={[styles.actionText, { color: T.clay }]}>
+                      {acked ? "Got it — alerts stopped" : ackBusy ? "Stopping…" : "I've got it"}
+                    </Text>
+                  </View>
+                </Tappable>
+              </View>
             )}
           </View>
         </FadeIn>
 
+        {/* What to do right now — only when it matters */}
+        {status === "missed" && !simMissed && !!data.emergencyNote.trim() && (
+          <FadeIn delay={90}>
+            <View style={[styles.emergency, shadow(1)]}>
+              <View style={styles.emergencyHead}>
+                <Ionicons name="information-circle" size={17} color={T.clay} />
+                <Text style={styles.emergencyTitle}>IN CASE OF EMERGENCY</Text>
+              </View>
+              <Text style={styles.emergencyText}>{data.emergencyNote}</Text>
+            </View>
+          </FadeIn>
+        )}
+
+        {/* Slow-change warning */}
+        {drift && !simMissed && (
+          <FadeIn delay={100}>
+            <View style={[styles.drift, shadow(1)]}>
+              <Ionicons name="trending-up" size={18} color={T.sunDeep} />
+              <Text style={styles.driftText}>
+                {name} has been checking in about{" "}
+                <Text style={{ fontFamily: F.bold }}>{drift.minutesLater} minutes later</Text>{" "}
+                this week — around {drift.recent} instead of {drift.usual}. Often nothing,
+                but worth a call.
+              </Text>
+            </View>
+          </FadeIn>
+        )}
+
+        {/* A word from you */}
+        <FadeIn delay={120}>
+          <SectionLabel text={`Send ${name} a note`} style={{ marginTop: S.xxl }} />
+          <Card>
+            <TextInput
+              value={note}
+              onChangeText={setNote}
+              placeholder={`e.g. Emma lost her first tooth!`}
+              placeholderTextColor={T.inkFaint}
+              style={styles.noteInput}
+              multiline
+              maxLength={140}
+              accessibilityLabel="Note to send"
+            />
+            <View style={styles.noteRow}>
+              <GhostButton
+                label={sentToday && !note.trim() ? "❤️ Sent today" : "❤️ Just a heart"}
+                tone="clay"
+                onPress={() => void onSend(false)}
+              />
+              <GhostButton
+                label={loveBusy ? "Sending…" : "Send note"}
+                icon="send-outline"
+                onPress={() => note.trim() && void onSend(true)}
+              />
+            </View>
+            <Text style={styles.noteHint}>
+              It greets {name} on their sun screen — one a day, so it stays special.
+            </Text>
+          </Card>
+        </FadeIn>
+
         {/* Stats */}
-        <FadeIn delay={110}>
+        <FadeIn delay={150}>
           <View style={styles.statRow}>
             <Stat icon="flame" label="Streak" value={`${streak}`} unit={streak === 1 ? "day" : "days"} tint={T.sunDeep} />
             <Stat icon="alarm-outline" label="Usual" value={usualTime(history, tz)} tint={T.ink} />
@@ -194,7 +312,7 @@ export default function FamilyDash() {
         </FadeIn>
 
         {/* 14-day history */}
-        <FadeIn delay={150}>
+        <FadeIn delay={180}>
           <SectionLabel text="Last 14 mornings" style={{ marginTop: S.xxl }} />
           <Card padded={false} style={{ paddingVertical: S.lg, paddingHorizontal: S.md }}>
             <View style={styles.daysRow}>
@@ -235,24 +353,24 @@ export default function FamilyDash() {
             </View>
             {Object.keys(history).length === 0 && (
               <Text style={styles.emptyNote}>
-                This fills in as {name} checks in — day one starts when they enter
-                their invite code.
+                This fills in as {name} checks in — day one starts when they enter their
+                invite code.
               </Text>
             )}
           </Card>
         </FadeIn>
 
         {/* What the escalation system did today */}
-        {(data.todaysAlerts.length > 0 || testActive) && (
-          <FadeIn delay={180}>
+        {(data.todaysAlerts.length > 0 || testActive || acked) && (
+          <FadeIn delay={210}>
             <SectionLabel text="What the system did today" style={{ marginTop: S.xxl }} />
             <Card>
               {testActive && (
                 <View style={styles.testBanner}>
                   <Ionicons name="flask" size={16} color={T.sunDeep} />
                   <Text style={styles.testBannerText}>
-                    Test alarm running — steps appear here within a minute of each
-                    other. Pull down to refresh.
+                    Test alarm running — steps appear here within a minute of each other.
+                    Pull down to refresh.
                   </Text>
                 </View>
               )}
@@ -260,14 +378,11 @@ export default function FamilyDash() {
                 <View key={i} style={styles.timelineRow}>
                   <View style={styles.timelineLeft}>
                     <View style={[styles.timelineDot, { backgroundColor: dotColor(a) }]} />
-                    {i < data.todaysAlerts.length - 1 && <View style={styles.timelineLine} />}
+                    {(i < data.todaysAlerts.length - 1 || acked) && <View style={styles.timelineLine} />}
                   </View>
                   <View style={{ flex: 1, paddingBottom: S.lg }}>
                     <Text style={styles.timelineTime}>
-                      {new Date(a.at).toLocaleTimeString([], {
-                        hour: "numeric",
-                        minute: "2-digit",
-                      })}
+                      {new Date(a.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
                     </Text>
                     <Text style={styles.timelineText}>{alertLabel(a, name)}</Text>
                     <Text style={[styles.timelineStatus, { color: statusColor(a.status) }]}>
@@ -276,12 +391,25 @@ export default function FamilyDash() {
                   </View>
                 </View>
               ))}
+              {acked && (
+                <View style={styles.timelineRow}>
+                  <View style={styles.timelineLeft}>
+                    <View style={[styles.timelineDot, { backgroundColor: T.leaf }]} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.timelineText}>You said “I've got it”</Text>
+                    <Text style={[styles.timelineStatus, { color: T.leaf }]}>
+                      Escalation stopped for today
+                    </Text>
+                  </View>
+                </View>
+              )}
             </Card>
           </FadeIn>
         )}
 
         {/* Testing */}
-        <FadeIn delay={210}>
+        <FadeIn delay={240}>
           <SectionLabel text="Testing" style={{ marginTop: S.xxl }} />
           <Card>
             <View style={styles.testRow}>
@@ -298,18 +426,48 @@ export default function FamilyDash() {
               />
             </View>
             <Text style={styles.testNote}>
-              <Text style={{ fontFamily: F.bold }}>Preview</Text> only changes this
-              screen.{" "}
-              <Text style={{ fontFamily: F.bold }}>Test the real alarm</Text> asks the
-              server to run a fake missed morning — reminder, your alert, then the
-              backup — compressed into about five minutes and logged above.
+              <Text style={{ fontFamily: F.bold }}>Preview</Text> only changes this screen.{" "}
+              <Text style={{ fontFamily: F.bold }}>Test the real alarm</Text> asks the server
+              to run a fake missed morning — reminder, your alert, then the backup —
+              compressed into about five minutes and logged above.
             </Text>
-            {note && <Text style={styles.noteError}>{note}</Text>}
+            {msg && <Text style={styles.noteError}>{msg}</Text>}
           </Card>
         </FadeIn>
       </ScrollView>
       <RoleTabs />
     </SafeAreaView>
+  );
+}
+
+/* Live proof the server is watching — the quiet reassurance of a safety net
+   you can actually see working. */
+function Heartbeat({ lastCheckedAt }: { lastCheckedAt: string | null }) {
+  if (!lastCheckedAt) {
+    return (
+      <View style={styles.beatRow}>
+        <View style={[styles.beatDot, { backgroundColor: T.inkFaint }]} />
+        <Text style={styles.beatText}>
+          Watching starts as soon as they join
+        </Text>
+      </View>
+    );
+  }
+  const secs = Math.max(0, Math.round((Date.now() - new Date(lastCheckedAt).getTime()) / 1000));
+  const stale = secs > 420; // the job runs every minute; 7 min is a real gap
+  const ago =
+    secs < 90
+      ? "moments ago"
+      : secs < 3600
+        ? `${Math.round(secs / 60)} min ago`
+        : `${Math.round(secs / 3600)} hr ago`;
+  return (
+    <View style={styles.beatRow}>
+      <View style={[styles.beatDot, { backgroundColor: stale ? T.sunDeep : T.leaf }]} />
+      <Text style={styles.beatText}>
+        {stale ? "Last checked" : "Watching · checked"} {ago}
+      </Text>
+    </View>
   );
 }
 
@@ -385,6 +543,10 @@ function alertLabel(a: AlertRow, parentName: string): string {
         : "False-alarm notice to your phone";
     case "notgreat":
       return `"Not great" heads-up to your phone`;
+    case "ack":
+      return "Escalation stopped — you've got it";
+    default:
+      return "Alert";
   }
 }
 
@@ -401,19 +563,18 @@ const statusColor = (s: string) =>
   s === "sent" ? T.leaf : s === "failed" ? T.clay : T.inkFaint;
 
 const dotColor = (a: AlertRow) =>
-  a.kind === "allclear" ? T.leaf : a.kind === "reminder" ? T.sunDeep : T.clay;
+  a.kind === "allclear" || a.kind === "ack"
+    ? T.leaf
+    : a.kind === "reminder"
+      ? T.sunDeep
+      : T.clay;
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: T.sky },
   scroll: { paddingHorizontal: S.xl, paddingTop: S.md, paddingBottom: S.xxl },
 
-  header: { flexDirection: "row", alignItems: "center", marginBottom: S.xl },
-  headerKicker: {
-    fontFamily: F.extra,
-    fontSize: 11,
-    letterSpacing: 1.5,
-    color: T.inkFaint,
-  },
+  header: { flexDirection: "row", alignItems: "center", marginBottom: S.sm },
+  headerKicker: { fontFamily: F.extra, fontSize: 11, letterSpacing: 1.5, color: T.inkFaint },
   headerName: { fontFamily: F.display, fontSize: 27, color: T.ink, marginTop: 2 },
   gear: {
     width: 40,
@@ -426,6 +587,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
+  beatRow: { flexDirection: "row", alignItems: "center", gap: 7, marginBottom: S.lg, marginLeft: 2 },
+  beatDot: { width: 8, height: 8, borderRadius: 4 },
+  beatText: { fontFamily: F.semi, fontSize: 12.5, color: T.inkSoft },
+
   hero: { borderRadius: R.xl, borderWidth: 1, padding: S.xl },
   heroTop: { flexDirection: "row", alignItems: "flex-start" },
   heroIcon: {
@@ -437,26 +602,56 @@ const styles = StyleSheet.create({
     marginRight: S.lg,
   },
   heroTitle: { fontFamily: F.display, fontSize: 22, lineHeight: 28, color: T.ink },
-  heroSub: {
-    fontFamily: F.body,
-    fontSize: 15,
-    lineHeight: 21,
-    color: T.inkSoft,
-    marginTop: 4,
-  },
-  loveBtn: {
-    marginTop: S.lg,
+  heroSub: { fontFamily: F.body, fontSize: 15, lineHeight: 21, color: T.inkSoft, marginTop: 4 },
+
+  actionRow: { flexDirection: "row", gap: S.sm, marginTop: S.lg },
+  actionBtn: { flex: 1, borderRadius: R.pill, paddingVertical: 12, alignItems: "center" },
+  actionPrimary: { backgroundColor: T.clay },
+  actionGhost: { backgroundColor: T.paper, borderWidth: 1.5, borderColor: T.clayLine },
+  actionDone: { backgroundColor: "transparent", borderWidth: 1.5, borderStyle: "dashed", borderColor: T.clayLine },
+  actionInner: { flexDirection: "row", alignItems: "center", gap: 6 },
+  actionText: { fontFamily: F.bold, fontSize: 14.5 },
+
+  emergency: {
     backgroundColor: T.paper,
-    borderRadius: R.pill,
+    borderRadius: R.lg,
     borderWidth: 1.5,
     borderColor: T.clayLine,
-    paddingVertical: 12,
-    alignItems: "center",
+    padding: S.lg,
+    marginTop: S.md,
   },
-  loveBtnSent: { backgroundColor: "transparent", borderStyle: "dashed" },
-  loveBtnText: { fontFamily: F.bold, fontSize: 15, color: T.clay },
+  emergencyHead: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 },
+  emergencyTitle: { fontFamily: F.extra, fontSize: 11, letterSpacing: 1.4, color: T.clay },
+  emergencyText: { fontFamily: F.body, fontSize: 15, lineHeight: 22, color: T.ink },
 
-  statRow: { flexDirection: "row", gap: S.md, marginTop: S.lg },
+  drift: {
+    flexDirection: "row",
+    gap: S.md,
+    alignItems: "flex-start",
+    backgroundColor: T.sunPale,
+    borderRadius: R.lg,
+    borderWidth: 1,
+    borderColor: "#EBCF8C",
+    padding: S.lg,
+    marginTop: S.md,
+  },
+  driftText: { fontFamily: F.body, fontSize: 14, lineHeight: 20, color: T.ink, flex: 1 },
+
+  noteInput: {
+    borderWidth: 1.5,
+    borderColor: T.line,
+    borderRadius: R.md,
+    padding: S.md,
+    minHeight: 64,
+    fontSize: 16,
+    fontFamily: F.body,
+    color: T.ink,
+    textAlignVertical: "top",
+  },
+  noteRow: { flexDirection: "row", gap: S.sm, marginTop: S.md, flexWrap: "wrap" },
+  noteHint: { ...ty.small, marginTop: S.md },
+
+  statRow: { flexDirection: "row", gap: S.md, marginTop: S.xxl },
   stat: {
     flex: 1,
     backgroundColor: T.paper,
@@ -469,29 +664,12 @@ const styles = StyleSheet.create({
   },
   statValue: { fontFamily: F.extra, fontSize: 20, color: T.ink, marginTop: 6 },
   statUnit: { fontFamily: F.semi, fontSize: 13, color: T.inkSoft },
-  statLabel: {
-    fontFamily: F.extra,
-    fontSize: 10,
-    letterSpacing: 1.2,
-    color: T.inkFaint,
-    marginTop: 3,
-  },
+  statLabel: { fontFamily: F.extra, fontSize: 10, letterSpacing: 1.2, color: T.inkFaint, marginTop: 3 },
 
   daysRow: { flexDirection: "row", gap: 4 },
   dayCol: { flex: 1, alignItems: "center" },
-  dayCell: {
-    width: "100%",
-    height: 42,
-    borderRadius: R.sm,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  dayLetter: {
-    fontFamily: F.semi,
-    fontSize: 11,
-    color: T.inkFaint,
-    marginTop: 5,
-  },
+  dayCell: { width: "100%", height: 42, borderRadius: R.sm, alignItems: "center", justifyContent: "center" },
+  dayLetter: { fontFamily: F.semi, fontSize: 11, color: T.inkFaint, marginTop: 5 },
   dayLetterToday: { color: T.ink, fontFamily: F.extra },
   legend: {
     flexDirection: "row",
@@ -516,23 +694,12 @@ const styles = StyleSheet.create({
     padding: S.md,
     marginBottom: S.lg,
   },
-  testBannerText: {
-    fontFamily: F.semi,
-    fontSize: 13.5,
-    lineHeight: 19,
-    color: T.sunDeep,
-    flex: 1,
-  },
+  testBannerText: { fontFamily: F.semi, fontSize: 13.5, lineHeight: 19, color: T.sunDeep, flex: 1 },
   timelineRow: { flexDirection: "row" },
   timelineLeft: { width: 22, alignItems: "center" },
   timelineDot: { width: 10, height: 10, borderRadius: 5, marginTop: 4 },
   timelineLine: { width: 2, flex: 1, backgroundColor: T.lineSoft, marginVertical: 3 },
-  timelineTime: {
-    fontFamily: F.extra,
-    fontSize: 11,
-    letterSpacing: 0.8,
-    color: T.inkFaint,
-  },
+  timelineTime: { fontFamily: F.extra, fontSize: 11, letterSpacing: 0.8, color: T.inkFaint },
   timelineText: { fontFamily: F.semi, fontSize: 15, color: T.ink, marginTop: 2 },
   timelineStatus: { fontFamily: F.body, fontSize: 12.5, marginTop: 2 },
 
