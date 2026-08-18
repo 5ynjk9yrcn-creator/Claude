@@ -1,5 +1,12 @@
 import { useState } from "react";
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { RoleTabs, SettingsButton } from "../components/chrome";
 import { GhostButton, Kicker } from "../components/ui";
@@ -17,10 +24,22 @@ import {
 import { F, MOODS, T } from "../lib/theme";
 
 export default function FamilyDash() {
-  const { data, refresh } = useStore();
+  const { data, refresh, sendLove } = useStore();
   const [simMissed, setSimMissed] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [loveBusy, setLoveBusy] = useState(false);
+  const [loveError, setLoveError] = useState<string | null>(null);
   if (!data) return null;
+
+  const loveSent = data.loveSentDay === todayKey();
+  const onSendLove = async () => {
+    if (loveBusy || loveSent) return;
+    setLoveBusy(true);
+    setLoveError(null);
+    const err = await sendLove();
+    setLoveBusy(false);
+    if (err) setLoveError(err);
+  };
 
   const pullRefresh = async () => {
     setRefreshing(true);
@@ -122,6 +141,29 @@ export default function FamilyDash() {
           >
             <Text style={styles.statusTitle}>{statusCfg.title}</Text>
             <Text style={styles.statusSub}>{statusCfg.sub}</Text>
+            {status === "in" && !simMissed && (
+              <View style={{ marginTop: 12 }}>
+                {loveSent ? (
+                  <Text style={styles.loveSent}>
+                    ❤ Sent — it'll greet {name} on their sun screen.
+                  </Text>
+                ) : (
+                  <Pressable
+                    onPress={() => void onSendLove()}
+                    accessibilityRole="button"
+                    style={({ pressed }) => [
+                      styles.loveBtn,
+                      pressed ? { opacity: 0.8 } : null,
+                    ]}
+                  >
+                    <Text style={styles.loveBtnText}>
+                      {loveBusy ? "Sending…" : `Send ${name} a ❤`}
+                    </Text>
+                  </Pressable>
+                )}
+                {loveError && <Text style={styles.loveError}>{loveError}</Text>}
+              </View>
+            )}
           </View>
 
           {/* Escalation ladder, shown when missed */}
@@ -307,4 +349,16 @@ const styles = StyleSheet.create({
     marginTop: -10,
     marginBottom: 18,
   },
+  loveBtn: {
+    backgroundColor: T.paper,
+    borderWidth: 1.5,
+    borderColor: T.clay,
+    borderRadius: 999,
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    alignSelf: "flex-start",
+  },
+  loveBtnText: { fontFamily: F.bold, fontSize: 15, color: T.clay },
+  loveSent: { fontFamily: F.semi, fontSize: 15, color: T.clay },
+  loveError: { fontFamily: F.body, fontSize: 13, color: T.clay, marginTop: 6 },
 });

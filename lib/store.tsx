@@ -37,6 +37,8 @@ export type AppData = {
   checkins: Record<string, CheckIn>; // this phone's own check-ins, key YYYY-MM-DD
   watchedCheckins: Record<string, CheckIn>; // the watched person's history
   pendingDays: Record<string, CheckIn>; // own check-ins not yet synced
+  loveForMe: { day: string; from: string } | null; // latest ❤ sent to this phone's parent
+  loveSentDay: string | null; // last day this phone sent a ❤ to its watched circle
 };
 
 export const todayKey = (d = new Date()) => d.toLocaleDateString("en-CA");
@@ -116,6 +118,8 @@ function emptyData(): AppData {
     checkins: {},
     watchedCheckins: {},
     pendingDays: {},
+    loveForMe: null,
+    loveSentDay: null,
   };
 }
 
@@ -147,6 +151,7 @@ type Store = {
     myName?: string;
     contacts?: Contact[];
   }) => void;
+  sendLove: () => Promise<string | null>;
   refresh: () => Promise<void>;
   eraseEverything: () => Promise<void>;
 };
@@ -304,6 +309,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         next.inviteCode = watchCircle.invite_code;
         next.contacts = contacts;
         next.watchedCheckins = await loadCheckins(watchCircle.id);
+      }
+
+      // Hearts: the newest one sent to this phone's parent (last 2 days),
+      // and whether this phone already sent one to its watched circle today.
+      const loveSince = todayKey(dateNDaysAgo(1));
+      if (checkinCircle) {
+        const { data: lv } = await supabase
+          .from("loves")
+          .select("day, from_name")
+          .eq("circle_id", checkinCircle.id)
+          .gte("day", loveSince)
+          .order("day", { ascending: false })
+          .limit(1);
+        next.loveForMe = lv?.[0]
+          ? { day: lv[0].day as string, from: (lv[0].from_name as string) || "Your family" }
+          : null;
+      }
+      if (watchCircle) {
+        const { data: sent } = await supabase
+          .from("loves")
+          .select("day")
+          .eq("circle_id", watchCircle.id)
+          .eq("day", todayKey())
+          .limit(1);
+        next.loveSentDay = sent?.[0] ? todayKey() : next.loveSentDay;
       }
       persist(next);
     } finally {
@@ -532,6 +562,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [persist]
   );
 
+  const sendLove = useCallback(async (): Promise<string | null> => {
+    const cur = dataRef.current;
+    if (!cur?.watchCircleId) return "No circle to send to yet.";
+    const from = cur.contacts.find((c) => c.isPrimary)?.name || "Your family";
+    const { error } = await supabase.from("loves").upsert(
+      { circle_id: cur.watchCircleId, day: todayKey(), from_name: from },
+      { onConflict: "circle_id,day", ignoreDuplicates: true }
+    );
+    if (error) return "Couldn't send it — check your internet and try again.";
+    update({ loveSentDay: todayKey() });
+    return null;
+  }, [update]);
+
   const eraseEverything = useCallback(async () => {
     try {
       await supabase.auth.signOut();
@@ -556,6 +599,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         createCircles,
         claimInvite,
         saveSettings,
+        sendLove,
         refresh,
         eraseEverything,
       }}

@@ -41,6 +41,16 @@ export default function ParentHome() {
             {stage === "done" ? `That's it for today,\n${name}.` : `Good morning,\n${name}.`}
           </Text>
 
+          {data.loveForMe && (
+            <View style={styles.loveCard}>
+              <Text style={styles.loveText}>
+                ❤ {data.loveForMe.from} saw you were OK
+                {data.loveForMe.day === todayKey() ? "" : " yesterday"} and sent you
+                love.
+              </Text>
+            </View>
+          )}
+
           <Sun tapped={!!rec} onTap={checkInNow} />
 
           {stage === "sun" && (
@@ -184,5 +194,23 @@ const styles = StyleSheet.create({
     color: T.inkSoft,
     textDecorationLine: "underline",
     marginTop: 20,
+  },
+  loveCard: {
+    backgroundColor: T.clayPale,
+    borderWidth: 1.5,
+    borderColor: "#E5B3A5",
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    marginTop: -8,
+    marginBottom: 22,
+    maxWidth: 340,
+  },
+  loveText: {
+    fontFamily: F.semi,
+    fontSize: 18,
+    color: T.clay,
+    textAlign: "center",
+    lineHeight: 25,
   },
 });
