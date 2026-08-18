@@ -6,7 +6,7 @@ A daily check-in app for aging parents. The parent taps one big sun button each 
 
 ## Status
 
-- **Current phase:** 3 published — send-a-❤️ between family and parent (backend smoke-tested end to end)
+- **Current phase:** 4 core published — server-side escalation engine live (every-minute cron, idempotent alert ledger, run log, failure emails via Resend, in-app test alarm). SMS awaits Twilio; push delivery awaits the TestFlight build.
 - Expo project: https://expo.dev/accounts/macntyrs-team/projects/ok-today (updates publish to the `main` branch)
 - Supabase project: "Ok - Today" (`lotbohsxmttxxropegkt`, us-east-1) — tables `profiles`, `circles`, `contacts`, `checkins` with row-level security; anonymous sign-in and email auto-confirm enabled
 - The design prototype lives in `design/ok-today-prototype.jsx` and is the visual source of truth.
@@ -46,7 +46,12 @@ Every account-creation or dashboard step Austin completes gets checked off here,
 - [x] Database schema + privacy rules applied; anonymous sign-in and email auto-confirm enabled (done by Claude via the token) — *2026-08-18*
 
 ### Phase 4 — Twilio + Resend + Apple push setup
-*(steps will be added when we get there)*
+- [x] Resend account created and API key (`re_`, named `ok-today`) shared with Claude — *2026-08-18; stored as a server secret in Supabase, revoke at resend.com after launch if desired*
+- [x] Escalation Edge Function `deadline-check` deployed; pg_cron fires it every minute with a private cron key — *2026-08-18*
+- [x] Failure-email channel self-tested (email delivered to austin1254@hotmail.com) — *2026-08-18*
+- [x] Engine smoke-tested: test-mode ladder, idempotency (no duplicate alerts across runs), real missed deadline, false-alarm all-clear — *2026-08-18*
+- [ ] Twilio account created; Canadian number purchased; TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_FROM set as Supabase secrets
+- [ ] Apple Developer approved (gates push delivery + TestFlight)
 
 ### Phase 6 — TestFlight & App Store
 *(steps will be added when we get there)*

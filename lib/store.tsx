@@ -39,6 +39,17 @@ export type AppData = {
   pendingDays: Record<string, CheckIn>; // own check-ins not yet synced
   loveForMe: { day: string; from: string } | null; // latest ❤ sent to this phone's parent
   loveSentDay: string | null; // last day this phone sent a ❤ to its watched circle
+  todaysAlerts: AlertRow[]; // what the escalation system did today (watched circle)
+  testDeadlineAt: string | null; // when a test alarm is running, its fake deadline
+};
+
+export type AlertRow = {
+  kind: "reminder" | "primary" | "backup" | "allclear" | "notgreat";
+  channel: "push" | "sms";
+  target: string;
+  status: string;
+  isTest: boolean;
+  at: string; // ISO created_at
 };
 
 export const todayKey = (d = new Date()) => d.toLocaleDateString("en-CA");
@@ -120,6 +131,8 @@ function emptyData(): AppData {
     pendingDays: {},
     loveForMe: null,
     loveSentDay: null,
+    todaysAlerts: [],
+    testDeadlineAt: null,
   };
 }
 
@@ -132,6 +145,7 @@ type CircleRow = {
   parent_user_id: string | null;
   invite_code: string;
   is_self: boolean;
+  test_deadline_at: string | null;
 };
 
 type Store = {
@@ -152,6 +166,7 @@ type Store = {
     contacts?: Contact[];
   }) => void;
   sendLove: () => Promise<string | null>;
+  startTestAlarm: () => Promise<string | null>;
   refresh: () => Promise<void>;
   eraseEverything: () => Promise<void>;
 };
@@ -334,12 +349,36 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           .eq("day", todayKey())
           .limit(1);
         next.loveSentDay = sent?.[0] ? todayKey() : next.loveSentDay;
+
+        // What did the escalation system do today?
+        next.testDeadlineAt = watchCircle.test_deadline_at ?? null;
+        const { data: al } = await supabase
+          .from("alerts")
+          .select("kind, channel, target, status, run_tag, created_at")
+          .eq("circle_id", watchCircle.id)
+          .eq("day", todayKey())
+          .order("created_at");
+        next.todaysAlerts = (al ?? []).map((a) => ({
+          kind: a.kind,
+          channel: a.channel,
+          target: a.target as string,
+          status: a.status as string,
+          isTest: (a.run_tag as string).startsWith("test:"),
+          at: a.created_at as string,
+        }));
       }
       persist(next);
     } finally {
       syncing.current = false;
     }
   }, [flushPending, persist]);
+
+  /* Once signed in and set up, register this phone for push notifications. */
+  useEffect(() => {
+    if (session && dataRef.current?.setupComplete) {
+      void import("./push").then((m) => m.registerForPush(session.user.id));
+    }
+  }, [session, data?.setupComplete]);
 
   /* Re-sync when the app comes to the foreground, and every 30s while open. */
   useEffect(() => {
@@ -562,6 +601,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [persist]
   );
 
+  const startTestAlarm = useCallback(async (): Promise<string | null> => {
+    const cur = dataRef.current;
+    if (!cur?.watchCircleId) return "No circle to test yet.";
+    const at = new Date(Date.now() + 3 * 60000).toISOString();
+    const { error } = await supabase
+      .from("circles")
+      .update({ test_deadline_at: at })
+      .eq("id", cur.watchCircleId);
+    if (error) return "Couldn't start the test — check your internet and try again.";
+    update({ testDeadlineAt: at });
+    return null;
+  }, [update]);
+
   const sendLove = useCallback(async (): Promise<string | null> => {
     const cur = dataRef.current;
     if (!cur?.watchCircleId) return "No circle to send to yet.";
@@ -600,6 +652,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         claimInvite,
         saveSettings,
         sendLove,
+        startTestAlarm,
         refresh,
         eraseEverything,
       }}

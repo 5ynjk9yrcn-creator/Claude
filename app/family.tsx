@@ -19,17 +19,30 @@ import {
   todayKey,
   usualTime,
   useStore,
+  type AlertRow,
   type CheckIn,
 } from "../lib/store";
 import { F, MOODS, T } from "../lib/theme";
 
 export default function FamilyDash() {
-  const { data, refresh, sendLove } = useStore();
+  const { data, refresh, sendLove, startTestAlarm } = useStore();
   const [simMissed, setSimMissed] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [loveBusy, setLoveBusy] = useState(false);
   const [loveError, setLoveError] = useState<string | null>(null);
+  const [testBusy, setTestBusy] = useState(false);
+  const [testError, setTestError] = useState<string | null>(null);
   if (!data) return null;
+
+  const testActive = !!data.testDeadlineAt;
+  const onStartTest = async () => {
+    if (testBusy || testActive) return;
+    setTestBusy(true);
+    setTestError(null);
+    const err = await startTestAlarm();
+    setTestBusy(false);
+    if (err) setTestError(err);
+  };
 
   const loveSent = data.loveSentDay === todayKey();
   const onSendLove = async () => {
@@ -185,6 +198,34 @@ export default function FamilyDash() {
             </View>
           )}
 
+          {/* What the escalation system actually did today */}
+          {(data.todaysAlerts.length > 0 || testActive) && (
+            <View style={styles.alertLog}>
+              <Text style={styles.alertLogHead}>WHAT THE SYSTEM DID TODAY</Text>
+              {testActive && (
+                <Text style={styles.alertTesting}>
+                  ⏱ Test alarm running — new lines appear below within a minute of
+                  each step. Pull down to refresh.
+                </Text>
+              )}
+              {data.todaysAlerts.map((a, i) => (
+                <View key={i} style={styles.alertRow}>
+                  <Text style={styles.alertTime}>
+                    {new Date(a.at).toLocaleTimeString([], {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </Text>
+                  <Text style={styles.alertText}>
+                    {alertLabel(a, name)}
+                    {"  "}
+                    <Text style={statusStyle(a.status)}>{statusLabel(a.status)}</Text>
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+
           {/* 14-day history */}
           <Text style={styles.sectionLabel}>LAST 14 MORNINGS</Text>
           <View style={styles.daysRow}>
@@ -234,19 +275,70 @@ export default function FamilyDash() {
             <Stat label="Deadline" value={fmtTime(dl)} />
           </View>
 
-          {/* Demo controls */}
+          {/* Testing controls */}
           <View style={styles.demoRow}>
-            <Text style={styles.demoLabel}>DEMO</Text>
+            <Text style={styles.demoLabel}>TESTING</Text>
             <GhostButton
-              label={simMissed ? "End simulation" : "Simulate a missed morning"}
+              label={simMissed ? "End preview" : "Preview a missed morning"}
               onPress={() => setSimMissed(!simMissed)}
             />
+            <GhostButton
+              label={
+                testActive
+                  ? "Test alarm running…"
+                  : testBusy
+                    ? "Starting…"
+                    : "Test the real alarm (3 min)"
+              }
+              onPress={() => void onStartTest()}
+            />
           </View>
+          {testError && <Text style={styles.loveError}>{testError}</Text>}
+          <Text style={styles.testNote}>
+            "Preview" only changes this screen. "Test the real alarm" asks the server
+            to run a fake missed morning: reminder → alert → backup, compressed into
+            ~5 minutes, logged above. Texts and phone alerts switch on once Twilio and
+            the TestFlight build are connected.
+          </Text>
         </View>
       </ScrollView>
       <RoleTabs />
     </SafeAreaView>
   );
+}
+
+function alertLabel(a: AlertRow, parentName: string): string {
+  const test = a.isTest ? " (test)" : "";
+  switch (a.kind) {
+    case "reminder":
+      return `Reminder to ${parentName}${test}`;
+    case "primary":
+      return a.channel === "sms"
+        ? `Alert text to ${a.target}${test}`
+        : `Alert to your phone${test}`;
+    case "backup":
+      return `Backup text to ${a.target}${test}`;
+    case "allclear":
+      return a.channel === "sms"
+        ? `False-alarm text to ${a.target}`
+        : `False-alarm notice to your phone`;
+    case "notgreat":
+      return `"Not great" heads-up to your phone`;
+  }
+}
+
+function statusLabel(s: string): string {
+  if (s === "sent") return "✓ sent";
+  if (s === "skipped") return "· logged (delivery arrives with Twilio/TestFlight)";
+  if (s === "failed") return "✕ failed";
+  return "…";
+}
+
+function statusStyle(s: string) {
+  return {
+    fontFamily: F.bold,
+    color: s === "sent" ? T.leaf : s === "failed" ? T.clay : T.inkSoft,
+  };
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
@@ -361,4 +453,36 @@ const styles = StyleSheet.create({
   loveBtnText: { fontFamily: F.bold, fontSize: 15, color: T.clay },
   loveSent: { fontFamily: F.semi, fontSize: 15, color: T.clay },
   loveError: { fontFamily: F.body, fontSize: 13, color: T.clay, marginTop: 6 },
+  alertLog: {
+    backgroundColor: T.panel,
+    borderWidth: 1,
+    borderColor: T.line,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 20,
+  },
+  alertLogHead: {
+    fontFamily: F.extra,
+    fontSize: 12,
+    letterSpacing: 1.5,
+    color: T.inkSoft,
+    marginBottom: 8,
+  },
+  alertTesting: {
+    fontFamily: F.semi,
+    fontSize: 14,
+    color: T.sunDeep,
+    marginBottom: 8,
+    lineHeight: 20,
+  },
+  alertRow: { flexDirection: "row", gap: 10, paddingVertical: 4 },
+  alertTime: { fontFamily: F.bold, fontSize: 13, color: T.inkSoft, minWidth: 64 },
+  alertText: { fontFamily: F.body, fontSize: 14, color: T.ink, flex: 1, lineHeight: 20 },
+  testNote: {
+    fontFamily: F.body,
+    fontSize: 13,
+    color: T.inkSoft,
+    lineHeight: 19,
+    marginTop: 10,
+  },
 });
