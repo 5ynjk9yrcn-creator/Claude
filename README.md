@@ -6,16 +6,17 @@ A daily check-in app for aging parents. The parent taps one big sun button each 
 
 ## Status
 
-- **Current phase:** 1 built — waiting on an Expo access token to put it on Austin's iPhone
+- **Current phase:** 1 published — testable on Austin's iPhone via Expo Go
+- Expo project: https://expo.dev/accounts/macntyrs-team/projects/ok-today (updates publish to the `main` branch)
 - The design prototype lives in `design/ok-today-prototype.jsx` and is the visual source of truth.
 - Phase 2 (real accounts + Supabase) starts once the Supabase project exists.
 
 ## How to test Phase 1 on your iPhone
 
-1. Install the free **Expo Go** app from the App Store on your iPhone.
-2. On a computer, sign in at https://expo.dev → click your profile picture (top right) → **Account settings** → **Access tokens** → **Create token**. Name it `claude-build` and copy the long code it shows you.
-3. Paste that code to Claude in the build chat. (It lets Claude publish test versions to your Expo account. You can delete the token from that same page at any time to switch it off.)
-4. Claude publishes the app and gives you a link/QR code to open in Expo Go.
+1. Install the free **Expo Go** app from the App Store.
+2. Open Expo Go and **sign in** with your Expo account (macntyrs-team).
+3. The **ok-today** project appears on the home screen — tap it, then open the latest update on the **main** branch.
+4. Alternative: on a computer, open the [latest update page](https://expo.dev/accounts/macntyrs-team/projects/ok-today/updates), click **Preview**, and scan the QR code with the iPhone camera.
 
 ## Manual steps log
 
@@ -31,8 +32,10 @@ Every account-creation or dashboard step Austin completes gets checked off here,
 - [x] `ok-today-prototype.jsx` added to this repository — *2026-08-18*
 
 ### Phase 1 — Testing on Austin's iPhone
-- [ ] Expo Go installed on iPhone
-- [ ] Expo access token created and shared with Claude
+- [x] Cloud workspace network access set to Full so Claude can reach Expo/Supabase/Twilio — *2026-08-18*
+- [x] Expo access token (Developer role, named `claude-build`) created and shared with Claude — *2026-08-18*
+- [x] Expo project created and Phase 1 published (update group `92431918`) — *2026-08-18*
+- [ ] Expo Go installed on iPhone and signed in
 - [ ] App opened in Expo Go and every screen tapped through
 
 ### Phase 2 — Supabase setup

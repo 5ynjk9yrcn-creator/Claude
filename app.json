@@ -25,6 +25,19 @@
     "scheme": "oktoday",
     "plugins": [
       "expo-router"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "695a7c84-2e3b-48de-9c77-4e83db256ba0"
+      }
+    },
+    "owner": "macntyrs-team",
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/695a7c84-2e3b-48de-9c77-4e83db256ba0"
+    }
   }
 }
