@@ -73,7 +73,7 @@ export default function Contacts() {
             });
           }
           update({ contacts });
-          router.push("/setup/invite");
+          router.push(data?.role === "both" ? "/setup/my-name" : "/setup/invite");
         }}
       />
     </SetupFrame>

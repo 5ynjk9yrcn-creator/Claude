@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -14,40 +15,57 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { DeadlinePicker, GhostButton } from "../components/ui";
-import { fmtDeadline, seedCheckins, useStore, type Contact } from "../lib/store";
+import {
+  fmtDeadline,
+  formatInviteCode,
+  useStore,
+  type Contact,
+} from "../lib/store";
 import { F, T } from "../lib/theme";
 
 export default function Settings() {
   const router = useRouter();
-  const { data, update, resetAll } = useStore();
+  const { data, saveSettings, eraseEverything } = useStore();
+
+  // Draft values commit to the cloud when a field loses focus,
+  // so we don't send a request per keystroke.
+  const [myName, setMyName] = useState(data?.myName ?? "");
+  const [parentName, setParentName] = useState(data?.parentName ?? "");
+  const [contacts, setContacts] = useState<Contact[]>([
+    data?.contacts[0] ?? { name: "", phone: "", isPrimary: true },
+    data?.contacts[1] ?? { name: "", phone: "", isPrimary: false },
+  ]);
   if (!data) return null;
 
   const watches = data.role === "family" || data.role === "both";
   const checksIn = data.role === "parent" || data.role === "both";
-  const parentName = data.parentName || "your parent";
+  const displayParent = data.parentName || "your parent";
+  const code = data.inviteCode ? formatInviteCode(data.inviteCode) : null;
 
-  const setContact = (index: number, patch: Partial<Contact>) => {
-    const contacts = [...data.contacts];
-    while (contacts.length <= index) {
-      contacts.push({ name: "", phone: "", isPrimary: contacts.length === 0 });
-    }
-    contacts[index] = { ...contacts[index], ...patch };
-    update({
-      contacts: contacts.filter((c) => c.name.trim() || c.phone.trim()),
+  const commitContacts = () => {
+    saveSettings({
+      contacts: contacts
+        .filter((c) => c.name.trim() || c.phone.trim())
+        .map((c, i) => ({ ...c, isPrimary: i === 0 })),
     });
   };
 
   const confirmReset = () => {
     Alert.alert(
-      "Start over?",
-      "This erases everything in the app on this phone — names, contacts, and check-in history. There's no undo.",
+      "Sign out & reset this phone?",
+      "This signs you out and clears the app on this phone. Your circle stays safe in the cloud — sign back in to get it back.",
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Erase everything", style: "destructive", onPress: () => {
-          resetAll();
-          router.dismissAll();
-          router.replace("/welcome");
-        } },
+        {
+          text: "Sign out & reset",
+          style: "destructive",
+          onPress: () => {
+            void eraseEverything().then(() => {
+              router.dismissAll();
+              router.replace("/welcome");
+            });
+          },
+        },
       ]
     );
   };
@@ -57,9 +75,9 @@ export default function Settings() {
     try {
       await Share.share({
         message:
-          `Hi ${parentName}! I set up OK Today so you can let me know you're OK ` +
-          `each morning with one tap. I'll help you get the app on your phone — ` +
-          `it takes two minutes. — ${from}`,
+          `Hi ${displayParent}! I set up OK Today so you can let me know you're OK ` +
+          `each morning with one tap. Get the app, choose “I'm checking in”, and ` +
+          `enter this code: ${code}. — ${from}`,
       });
     } catch {
       /* user closed the share sheet */
@@ -86,23 +104,31 @@ export default function Settings() {
             <Section title="My check-in">
               <Row label="My name">
                 <TextInput
-                  value={data.myName}
-                  onChangeText={(v) => update({ myName: v })}
+                  value={myName}
+                  onChangeText={setMyName}
+                  onEndEditing={() => saveSettings({ myName: myName.trim() })}
                   style={styles.input}
                   placeholder="Your first name"
                   placeholderTextColor={T.inkSoft}
                 />
               </Row>
+              {data.role === "parent" && (
+                <Text style={styles.note}>
+                  Your daily deadline is {fmtDeadline(data.deadline)} — your family
+                  sets it from their phone.
+                </Text>
+              )}
             </Section>
           )}
 
           {watches && (
             <>
-              <Section title={`Watching over ${parentName}`}>
+              <Section title={`Watching over ${displayParent}`}>
                 <Row label="Their name">
                   <TextInput
-                    value={data.parentName}
-                    onChangeText={(v) => update({ parentName: v })}
+                    value={parentName}
+                    onChangeText={setParentName}
+                    onEndEditing={() => saveSettings({ parentName: parentName.trim() })}
                     style={styles.input}
                     placeholder="First name"
                     placeholderTextColor={T.inkSoft}
@@ -111,13 +137,13 @@ export default function Settings() {
                 <Row label="Daily deadline">
                   <DeadlinePicker
                     value={data.deadline}
-                    onChange={(v) => update({ deadline: v })}
+                    onChange={(v) => saveSettings({ deadline: v })}
                   />
                 </Row>
                 <Text style={styles.note}>
-                  If {parentName} hasn't checked in by {fmtDeadline(data.deadline)},
-                  alerts begin. The deadline follows {data.timezone} — {parentName}'s
-                  timezone.
+                  If {displayParent} hasn't checked in by {fmtDeadline(data.deadline)},
+                  alerts begin. The deadline follows {data.timezone} —{" "}
+                  {displayParent}'s timezone.
                 </Text>
               </Section>
 
@@ -129,15 +155,25 @@ export default function Settings() {
                     </Text>
                     <View style={styles.contactRow}>
                       <TextInput
-                        value={data.contacts[i]?.name ?? ""}
-                        onChangeText={(v) => setContact(i, { name: v })}
+                        value={contacts[i].name}
+                        onChangeText={(v) =>
+                          setContacts((cs) =>
+                            cs.map((c, j) => (j === i ? { ...c, name: v } : c))
+                          )
+                        }
+                        onEndEditing={commitContacts}
                         style={[styles.input, { flex: 1 }]}
                         placeholder="Name"
                         placeholderTextColor={T.inkSoft}
                       />
                       <TextInput
-                        value={data.contacts[i]?.phone ?? ""}
-                        onChangeText={(v) => setContact(i, { phone: v })}
+                        value={contacts[i].phone}
+                        onChangeText={(v) =>
+                          setContacts((cs) =>
+                            cs.map((c, j) => (j === i ? { ...c, phone: v } : c))
+                          )
+                        }
+                        onEndEditing={commitContacts}
                         style={[styles.input, { flex: 1.3 }]}
                         placeholder="Mobile number"
                         placeholderTextColor={T.inkSoft}
@@ -149,10 +185,21 @@ export default function Settings() {
               </Section>
 
               <Section title="Invite">
-                <GhostButton label={`Text the invite to ${parentName} ✉`} onPress={inviteAgain} />
+                {code && (
+                  <View style={styles.codeCard}>
+                    <Text style={styles.codeLabel}>
+                      {displayParent.toUpperCase()}'S CODE
+                    </Text>
+                    <Text style={styles.code}>{code}</Text>
+                  </View>
+                )}
+                <GhostButton
+                  label={`Text the invite to ${displayParent} ✉`}
+                  onPress={inviteAgain}
+                />
                 <Text style={styles.note}>
-                  The one-tap join link for {parentName}'s phone arrives in Phase 2 of
-                  the build.
+                  {displayParent} enters this code once under “I'm checking in” and
+                  their phone is fully set up.
                 </Text>
               </Section>
             </>
@@ -160,27 +207,19 @@ export default function Settings() {
 
           <Section title="Notifications">
             <Text style={styles.note}>
-              Gentle reminders{checksIn ? " for you" : ` for ${parentName}`} an hour
+              Gentle reminders{checksIn ? " for you" : ` for ${displayParent}`} an hour
               before the deadline, and alert texts when a morning is missed, switch on
               in Phase 4 of the build — they run from our server, not this phone.
             </Text>
           </Section>
 
-          <Section title="Data & testing">
-            {watches && (
-              <View style={{ marginBottom: 10 }}>
-                <GhostButton
-                  label="Re-seed demo history"
-                  onPress={() => update({ watchedCheckins: seedCheckins() })}
-                />
-              </View>
-            )}
+          <Section title="Account">
             <Pressable onPress={confirmReset} style={styles.dangerBtn}>
-              <Text style={styles.dangerText}>Erase everything & start over</Text>
+              <Text style={styles.dangerText}>Sign out & reset this phone</Text>
             </Pressable>
           </Section>
 
-          <Text style={styles.version}>OK Today — Phase 1 preview</Text>
+          <Text style={styles.version}>OK Today — Phase 2 preview</Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -257,6 +296,23 @@ const styles = StyleSheet.create({
   contactBlock: { marginBottom: 14 },
   contactHead: { fontFamily: F.bold, fontSize: 13, color: T.inkSoft, marginBottom: 7 },
   contactRow: { flexDirection: "row", gap: 8 },
+  codeCard: {
+    backgroundColor: T.panel,
+    borderWidth: 2,
+    borderColor: T.sunDeep,
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  codeLabel: {
+    fontFamily: F.bold,
+    fontSize: 11,
+    letterSpacing: 2,
+    color: T.inkSoft,
+    marginBottom: 4,
+  },
+  code: { fontFamily: F.extra, fontSize: 26, color: T.ink, letterSpacing: 2 },
   dangerBtn: {
     borderWidth: 1.5,
     borderColor: T.clay,

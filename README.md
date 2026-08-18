@@ -6,10 +6,11 @@ A daily check-in app for aging parents. The parent taps one big sun button each 
 
 ## Status
 
-- **Current phase:** 1 published — testable on Austin's iPhone via Expo Go
+- **Current phase:** 2 published — cloud accounts, circles, invite codes, offline-safe check-ins
 - Expo project: https://expo.dev/accounts/macntyrs-team/projects/ok-today (updates publish to the `main` branch)
+- Supabase project: "Ok - Today" (`lotbohsxmttxxropegkt`, us-east-1) — tables `profiles`, `circles`, `contacts`, `checkins` with row-level security; anonymous sign-in and email auto-confirm enabled
 - The design prototype lives in `design/ok-today-prototype.jsx` and is the visual source of truth.
-- Phase 2 (real accounts + Supabase) starts once the Supabase project exists.
+- Phase 3 (real dashboard sync + love-back) is next; Phase 4 needs Twilio + Resend + Apple Developer.
 
 ## How to test Phase 1 on your iPhone
 
@@ -39,7 +40,10 @@ Every account-creation or dashboard step Austin completes gets checked off here,
 - [ ] App opened in Expo Go and every screen tapped through
 
 ### Phase 2 — Supabase setup
-*(steps will be added when we get there)*
+- [x] Supabase account + project "Ok - Today" created — *2026-08-18*
+- [x] Publishable key shared with Claude (ships inside the app; safe to be public) — *2026-08-18*
+- [x] Personal access token (`sbp_`, named `claude-build`) shared with Claude — *2026-08-18; revoke at supabase.com/dashboard/account/tokens after launch*
+- [x] Database schema + privacy rules applied; anonymous sign-in and email auto-confirm enabled (done by Claude via the token) — *2026-08-18*
 
 ### Phase 4 — Twilio + Resend + Apple push setup
 *(steps will be added when we get there)*

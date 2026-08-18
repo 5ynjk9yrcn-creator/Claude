@@ -23,7 +23,7 @@ export default function Welcome() {
           sub="Set up daily check-ins for a parent"
           onPress={() => {
             update({ role: "family" });
-            router.push("/setup/parent-info");
+            router.push("/auth");
           }}
         />
         <BigButton
@@ -41,7 +41,7 @@ export default function Welcome() {
           tone="secondary"
           onPress={() => {
             update({ role: "both" });
-            router.push("/setup/parent-info");
+            router.push("/auth");
           }}
         />
         <View style={{ flex: 1 }} />

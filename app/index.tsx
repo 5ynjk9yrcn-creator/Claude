@@ -6,9 +6,9 @@ import { F, T } from "../lib/theme";
 /* Entry point: route to the right home for the saved role,
    or to the welcome screen on first launch. */
 export default function Index() {
-  const { data } = useStore();
+  const { data, sessionReady, hasSession } = useStore();
 
-  if (!data) {
+  if (!data || !sessionReady) {
     return (
       <View
         style={{
@@ -25,7 +25,8 @@ export default function Index() {
     );
   }
 
-  if (data.setupComplete) {
+  // Cloud accounts need a live sign-in; without one, start fresh.
+  if (data.setupComplete && hasSession) {
     if (data.role === "family") return <Redirect href="/family" />;
     if (data.role === "parent" || data.role === "both")
       return <Redirect href="/parent-home" />;

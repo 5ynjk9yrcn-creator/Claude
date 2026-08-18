@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { RoleTabs, SettingsButton } from "../components/chrome";
 import { GhostButton, Kicker } from "../components/ui";
@@ -17,9 +17,16 @@ import {
 import { F, MOODS, T } from "../lib/theme";
 
 export default function FamilyDash() {
-  const { data } = useStore();
+  const { data, refresh } = useStore();
   const [simMissed, setSimMissed] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   if (!data) return null;
+
+  const pullRefresh = async () => {
+    setRefreshing(true);
+    await refresh();
+    setRefreshing(false);
+  };
 
   const history = data.watchedCheckins;
   const realRec = history[todayKey()];
@@ -96,7 +103,12 @@ export default function FamilyDash() {
   return (
     <SafeAreaView style={styles.safe}>
       <SettingsButton />
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => void pullRefresh()} />
+        }
+      >
         <View style={styles.card}>
           <Kicker text="Watching over" />
           <Text style={styles.h2}>{name}'s mornings</Text>
@@ -165,6 +177,13 @@ export default function FamilyDash() {
               );
             })}
           </View>
+
+          {Object.keys(history).length === 0 && (
+            <Text style={styles.emptyNote}>
+              History fills in as {name} checks in each morning — day one starts
+              when they enter their invite code.
+            </Text>
+          )}
 
           {/* Stats */}
           <View style={styles.statRow}>
@@ -280,4 +299,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   demoLabel: { fontFamily: F.bold, fontSize: 13, color: T.inkSoft },
+  emptyNote: {
+    fontFamily: F.body,
+    fontSize: 14,
+    color: T.inkSoft,
+    lineHeight: 20,
+    marginTop: -10,
+    marginBottom: 18,
+  },
 });
