@@ -1,77 +1,96 @@
 import { useRouter } from "expo-router";
-import { StyleSheet, Text, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { BigButton } from "../components/ui";
+import { SunMark } from "../components/Sun";
+import { ChoiceCard, FadeIn } from "../components/ui";
 import { useStore } from "../lib/store";
-import { F, T } from "../lib/theme";
+import { F, S, T, type as ty } from "../lib/theme";
 
 export default function Welcome() {
   const router = useRouter();
   const { update } = useStore();
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <View style={styles.wrap}>
-        <Text style={styles.logo}>☀ OK Today</Text>
-        <Text style={styles.tagline}>One tap from Mom.{"\n"}One less worry for you.</Text>
+    <LinearGradient colors={[T.skyMist, T.skyDeep]} style={{ flex: 1 }}>
+      <SafeAreaView style={{ flex: 1 }}>
+        <ScrollView
+          contentContainerStyle={styles.wrap}
+          showsVerticalScrollIndicator={false}
+        >
+          <FadeIn style={styles.hero}>
+            <SunMark size={72} />
+            <Text style={styles.logo}>OK Today</Text>
+            <Text style={styles.tagline}>
+              One tap from Mom.{"\n"}One less worry for you.
+            </Text>
+          </FadeIn>
 
-        <View style={{ flex: 1 }} />
+          <FadeIn delay={140} style={{ width: "100%" }}>
+            <Text style={styles.prompt}>Who's using this phone?</Text>
 
-        <Text style={styles.prompt}>Who's using this phone?</Text>
-        <BigButton
-          label="I'm watching over someone"
-          sub="Set up daily check-ins for a parent"
-          onPress={() => {
-            update({ role: "family" });
-            router.push("/auth");
-          }}
-        />
-        <BigButton
-          label="I'm checking in"
-          sub="I'll tap the sun each morning"
-          tone="secondary"
-          onPress={() => {
-            update({ role: "parent" });
-            router.push("/parent-join");
-          }}
-        />
-        <BigButton
-          label="I'm doing both"
-          sub="I check in, and I watch over someone too"
-          tone="secondary"
-          onPress={() => {
-            update({ role: "both" });
-            router.push("/auth");
-          }}
-        />
-        <View style={{ flex: 1 }} />
-      </View>
-    </SafeAreaView>
+            <ChoiceCard
+              icon="heart"
+              accent={T.clay}
+              title="I'm watching over someone"
+              sub="Set up daily check-ins for a parent"
+              onPress={() => {
+                update({ role: "family" });
+                router.push("/auth");
+              }}
+            />
+            <ChoiceCard
+              icon="sunny"
+              accent={T.sunDeep}
+              title="I'm checking in"
+              sub="I'll tap the sun each morning"
+              onPress={() => {
+                update({ role: "parent" });
+                router.push("/parent-join");
+              }}
+            />
+            <ChoiceCard
+              icon="people"
+              accent={T.leaf}
+              title="I'm doing both"
+              sub="I check in, and I watch over someone too"
+              onPress={() => {
+                update({ role: "both" });
+                router.push("/auth");
+              }}
+            />
+          </FadeIn>
+        </ScrollView>
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: T.sky },
-  wrap: { flex: 1, padding: 26, paddingTop: 40 },
+  wrap: {
+    flexGrow: 1,
+    justifyContent: "center",
+    paddingHorizontal: S.xl,
+    paddingVertical: S.xxl,
+  },
+  hero: { alignItems: "center", marginBottom: S.xxxl },
   logo: {
-    fontFamily: F.serif,
-    fontSize: 34,
+    fontFamily: F.display,
+    fontSize: 38,
     color: T.ink,
-    textAlign: "center",
+    marginTop: S.md,
   },
   tagline: {
-    fontFamily: F.body,
-    fontSize: 18,
+    ...ty.bodyLg,
     color: T.inkSoft,
     textAlign: "center",
-    marginTop: 12,
-    lineHeight: 26,
+    marginTop: S.md,
   },
   prompt: {
-    fontFamily: F.serif,
-    fontSize: 24,
+    fontFamily: F.display,
+    fontSize: 21,
     color: T.ink,
     textAlign: "center",
-    marginBottom: 22,
+    marginBottom: S.xl,
   },
 });

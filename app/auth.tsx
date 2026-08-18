@@ -2,19 +2,17 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { BigButton, Field } from "../components/ui";
+import { Button, ErrorNote, FadeIn, Field, Tappable } from "../components/ui";
 import { useStore } from "../lib/store";
-import { F, T } from "../lib/theme";
+import { F, S, T, type as ty } from "../lib/theme";
 
 /* Family-side account: create or sign in with email + password.
    Parents never see this screen — they join with an invite code. */
@@ -43,7 +41,6 @@ export default function Auth() {
       return;
     }
     if (mode === "signin") {
-      // Existing account: pull their circle down, then land home.
       await refresh();
       router.replace("/");
     } else {
@@ -57,45 +54,51 @@ export default function Auth() {
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <ScrollView contentContainerStyle={styles.wrap} keyboardShouldPersistTaps="handled">
-          <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backBtn}>
+        <View style={styles.topRow}>
+          <Tappable onPress={() => router.back()} accessibilityLabel="Go back" style={styles.back}>
             <Ionicons name="chevron-back" size={22} color={T.ink} />
-            <Text style={styles.backText}>Back</Text>
-          </Pressable>
+          </Tappable>
+        </View>
 
-          <Text style={styles.title}>
-            {mode === "signup" ? "Create your account" : "Welcome back"}
-          </Text>
-          <Text style={styles.sub}>
-            {mode === "signup"
-              ? "So your circle is saved safely and works across phones."
-              : "Sign in to get back to your circle."}
-          </Text>
+        <ScrollView
+          contentContainerStyle={styles.wrap}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <FadeIn>
+            <Text style={styles.title}>
+              {mode === "signup" ? "Create your account" : "Welcome back"}
+            </Text>
+            <Text style={styles.sub}>
+              {mode === "signup"
+                ? "So your circle is saved safely and works across phones."
+                : "Sign in to get back to your circle."}
+            </Text>
+          </FadeIn>
 
-          <View style={{ height: 26 }} />
-          <Field
-            label="Email"
-            value={email}
-            onChangeText={setEmail}
-            placeholder="you@example.com"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-          <Field
-            label="Password"
-            value={password}
-            onChangeText={setPassword}
-            placeholder="At least 6 characters"
-            secureTextEntry
-          />
+          <FadeIn delay={90} style={{ marginTop: S.xxl }}>
+            <Field
+              label="Email"
+              value={email}
+              onChangeText={setEmail}
+              placeholder="you@example.com"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="email"
+            />
+            <Field
+              label="Password"
+              value={password}
+              onChangeText={setPassword}
+              placeholder="At least 6 characters"
+              secureTextEntry
+              autoComplete={mode === "signup" ? "new-password" : "current-password"}
+            />
 
-          {error && <Text style={styles.error}>{error}</Text>}
+            {error && <ErrorNote text={error} />}
 
-          {busy ? (
-            <ActivityIndicator size="large" color={T.ink} style={{ marginVertical: 20 }} />
-          ) : (
-            <BigButton
+            <Button
               label={
                 !canGo
                   ? "Enter email & password"
@@ -104,31 +107,35 @@ export default function Auth() {
                     : "Sign in"
               }
               tone={canGo ? "primary" : "secondary"}
+              disabled={!canGo}
+              busy={busy}
               onPress={go}
             />
-          )}
 
-          <Pressable
-            onPress={() => {
-              setMode(mode === "signup" ? "signin" : "signup");
-              setError(null);
-            }}
-            hitSlop={8}
-            style={{ alignItems: "center", marginTop: 8 }}
-          >
-            <Text style={styles.switchLink}>
-              {mode === "signup"
-                ? "Already have an account? Sign in"
-                : "New here? Create an account"}
-            </Text>
-          </Pressable>
+            <Tappable
+              onPress={() => {
+                setMode(mode === "signup" ? "signin" : "signup");
+                setError(null);
+              }}
+              style={styles.switchBtn}
+              accessibilityLabel={
+                mode === "signup" ? "Switch to sign in" : "Switch to create account"
+              }
+            >
+              <Text style={styles.switchText}>
+                {mode === "signup"
+                  ? "Already have an account?  Sign in"
+                  : "New here?  Create an account"}
+              </Text>
+            </Tappable>
 
-          {data?.role === "both" && (
-            <Text style={styles.note}>
-              After this you'll set up the person you're watching over, then your own
-              daily check-in.
-            </Text>
-          )}
+            {data?.role === "both" && (
+              <Text style={styles.note}>
+                Next you'll set up the person you're watching over, then your own
+                daily check-in.
+              </Text>
+            )}
+          </FadeIn>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -137,39 +144,21 @@ export default function Auth() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: T.sky },
-  wrap: { padding: 26, paddingTop: 18, paddingBottom: 60 },
-  backBtn: { flexDirection: "row", alignItems: "center", marginBottom: 20 },
-  backText: { fontFamily: F.bold, fontSize: 17, color: T.ink },
-  title: { fontFamily: F.serif, fontSize: 32, color: T.ink },
-  sub: {
-    fontFamily: F.body,
-    fontSize: 17,
-    color: T.inkSoft,
-    marginTop: 10,
-    lineHeight: 24,
+  topRow: { paddingHorizontal: S.xl, paddingTop: S.sm, paddingBottom: S.sm },
+  back: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: T.paper,
+    borderWidth: 1,
+    borderColor: T.lineSoft,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  error: {
-    fontFamily: F.semi,
-    fontSize: 15,
-    color: T.clay,
-    backgroundColor: T.clayPale,
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 14,
-    lineHeight: 21,
-  },
-  switchLink: {
-    fontFamily: F.bold,
-    fontSize: 15,
-    color: T.inkSoft,
-    textDecorationLine: "underline",
-  },
-  note: {
-    fontFamily: F.body,
-    fontSize: 14,
-    color: T.inkSoft,
-    lineHeight: 20,
-    marginTop: 24,
-    textAlign: "center",
-  },
+  wrap: { paddingHorizontal: S.xl, paddingBottom: S.xxxl, paddingTop: S.lg },
+  title: { ...ty.title, fontSize: 30 },
+  sub: { ...ty.bodyLg, color: T.inkSoft, marginTop: S.md },
+  switchBtn: { alignItems: "center", paddingVertical: S.md },
+  switchText: { fontFamily: F.semi, fontSize: 15, color: T.inkSoft },
+  note: { ...ty.small, textAlign: "center", marginTop: S.xl },
 });

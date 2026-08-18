@@ -1,15 +1,17 @@
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { useState } from "react";
-import {
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { RoleTabs, SettingsButton } from "../components/chrome";
-import { GhostButton, Kicker } from "../components/ui";
+import { RoleTabs } from "../components/chrome";
+import {
+  Avatar,
+  Card,
+  FadeIn,
+  GhostButton,
+  SectionLabel,
+  Tappable,
+} from "../components/ui";
 import {
   calcStreak,
   checkInTime,
@@ -22,37 +24,28 @@ import {
   type AlertRow,
   type CheckIn,
 } from "../lib/store";
-import { F, MOODS, T } from "../lib/theme";
+import { F, MOODS, R, S, T, shadow, type as ty } from "../lib/theme";
 
 export default function FamilyDash() {
   const { data, refresh, sendLove, startTestAlarm } = useStore();
+  const router = useRouter();
   const [simMissed, setSimMissed] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [loveBusy, setLoveBusy] = useState(false);
-  const [loveError, setLoveError] = useState<string | null>(null);
   const [testBusy, setTestBusy] = useState(false);
-  const [testError, setTestError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
   if (!data) return null;
 
-  const testActive = !!data.testDeadlineAt;
-  const onStartTest = async () => {
-    if (testBusy || testActive) return;
-    setTestBusy(true);
-    setTestError(null);
-    const err = await startTestAlarm();
-    setTestBusy(false);
-    if (err) setTestError(err);
-  };
-
+  const history = data.watchedCheckins;
+  const realRec = history[todayKey()];
+  const rec = simMissed ? undefined : realRec;
+  const dl = deadlineToday(data.deadline);
+  const pastDeadline = simMissed || new Date() > dl;
+  const status: "in" | "missed" | "waiting" = rec ? "in" : pastDeadline ? "missed" : "waiting";
+  const streak = simMissed ? 0 : calcStreak(history);
+  const name = data.parentName || "Your parent";
   const loveSent = data.loveSentDay === todayKey();
-  const onSendLove = async () => {
-    if (loveBusy || loveSent) return;
-    setLoveBusy(true);
-    setLoveError(null);
-    const err = await sendLove();
-    setLoveBusy(false);
-    if (err) setLoveError(err);
-  };
+  const testActive = !!data.testDeadlineAt;
 
   const pullRefresh = async () => {
     setRefreshing(true);
@@ -60,26 +53,25 @@ export default function FamilyDash() {
     setRefreshing(false);
   };
 
-  const history = data.watchedCheckins;
-  const realRec = history[todayKey()];
-  const rec = simMissed ? undefined : realRec;
-  const dl = deadlineToday(data.deadline);
-  const pastDeadline = simMissed || new Date() > dl;
-  const status: "in" | "missed" | "waiting" = rec
-    ? "in"
-    : pastDeadline
-      ? "missed"
-      : "waiting";
-  const streak = simMissed ? 0 : calcStreak(history);
-  const name = data.parentName || "Your parent";
-  const backup = data.contacts.find((c) => !c.isPrimary);
+  const onSendLove = async () => {
+    if (loveBusy || loveSent) return;
+    setLoveBusy(true);
+    setNote(null);
+    const err = await sendLove();
+    setLoveBusy(false);
+    if (err) setNote(err);
+  };
 
-  const days: {
-    k: string;
-    letter: string;
-    rec: CheckIn | undefined;
-    isToday: boolean;
-  }[] = [];
+  const onStartTest = async () => {
+    if (testBusy || testActive) return;
+    setTestBusy(true);
+    setNote(null);
+    const err = await startTestAlarm();
+    setTestBusy(false);
+    if (err) setNote(err);
+  };
+
+  const days: { k: string; letter: string; rec: CheckIn | undefined; isToday: boolean }[] = [];
   for (let n = 13; n >= 0; n--) {
     const d = dateNDaysAgo(n);
     const k = todayKey(d);
@@ -91,219 +83,264 @@ export default function FamilyDash() {
     });
   }
 
-  const statusCfg = {
+  const cfg = {
     in: {
-      bg: T.leafPale,
-      border: T.leaf,
-      title: `${name} checked in at ${rec ? checkInTime(rec) : ""} ✓`,
+      tint: T.leafPale,
+      accent: T.leaf,
+      border: "#B9DCC8",
+      icon: "checkmark-circle" as const,
+      title: `Checked in at ${rec ? checkInTime(rec) : ""}`,
       sub:
         rec?.mood && MOODS[rec.mood]
-          ? `Feeling: ${MOODS[rec.mood].label.toLowerCase()}`
+          ? `Feeling ${MOODS[rec.mood].label.toLowerCase()} ${MOODS[rec.mood].emoji}`
           : "All quiet — nothing you need to do.",
     },
     waiting: {
-      bg: T.okayPale,
-      border: T.sunDeep,
-      title: "No check-in yet this morning",
-      sub: `Nothing to worry about until ${fmtTime(dl)} — the usual time is ${usualTime(
-        history
-      )}.`,
+      tint: T.sunPale,
+      accent: T.sunDeep,
+      border: "#EBCF8C",
+      icon: "time-outline" as const,
+      title: "No check-in yet",
+      sub: `Nothing to worry about until ${fmtTime(dl)}. Usual time is ${usualTime(history)}.`,
     },
     missed: {
-      bg: T.clayPale,
-      border: T.clay,
-      title: `Missed check-in — past ${fmtTime(dl)}`,
-      sub: "The escalation ladder below would now be running.",
+      tint: T.clayPale,
+      accent: T.clay,
+      border: T.clayLine,
+      icon: "alert-circle" as const,
+      title: `Missed check-in`,
+      sub: `Nothing since the ${fmtTime(dl)} deadline — alerts are going out.`,
     },
   }[status];
 
-  const plus = (mins: number) => {
-    const c = new Date(dl);
-    c.setMinutes(c.getMinutes() + mins);
-    return fmtTime(c);
-  };
-  const ladder = [
-    { t: fmtTime(dl), txt: `Push + text you: “${name} hasn't checked in today.”` },
-    {
-      t: plus(20),
-      txt: backup
-        ? `Text ${backup.name} (backup contact).`
-        : "Text the backup contact (none added yet).",
-    },
-  ];
-
   return (
-    <SafeAreaView style={styles.safe}>
-      <SettingsButton />
+    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <ScrollView
         contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => void pullRefresh()} />
+          <RefreshControl refreshing={refreshing} onRefresh={() => void pullRefresh()} tintColor={T.inkSoft} />
         }
       >
-        <View style={styles.card}>
-          <Kicker text="Watching over" />
-          <Text style={styles.h2}>{name}'s mornings</Text>
+        {/* Header */}
+        <FadeIn>
+          <View style={styles.header}>
+            <Avatar name={name} size={48} />
+            <View style={{ flex: 1, marginLeft: S.md }}>
+              <Text style={styles.headerKicker}>WATCHING OVER</Text>
+              <Text style={styles.headerName} numberOfLines={1}>
+                {name}
+              </Text>
+            </View>
+            <Tappable
+              onPress={() => router.push("/settings")}
+              accessibilityLabel="Open settings"
+              style={[styles.gear, shadow(1)]}
+            >
+              <Ionicons name="settings-outline" size={20} color={T.inkSoft} />
+            </Tappable>
+          </View>
+        </FadeIn>
 
-          {/* Today's status */}
+        {/* Today's status */}
+        <FadeIn delay={60}>
           <View
             style={[
-              styles.status,
-              { backgroundColor: statusCfg.bg, borderColor: statusCfg.border },
+              styles.hero,
+              { backgroundColor: cfg.tint, borderColor: cfg.border },
+              shadow(1),
             ]}
           >
-            <Text style={styles.statusTitle}>{statusCfg.title}</Text>
-            <Text style={styles.statusSub}>{statusCfg.sub}</Text>
-            {status === "in" && !simMissed && (
-              <View style={{ marginTop: 12 }}>
-                {loveSent ? (
-                  <Text style={styles.loveSent}>
-                    ❤ Sent — it'll greet {name} on their sun screen.
-                  </Text>
-                ) : (
-                  <Pressable
-                    onPress={() => void onSendLove()}
-                    accessibilityRole="button"
-                    style={({ pressed }) => [
-                      styles.loveBtn,
-                      pressed ? { opacity: 0.8 } : null,
-                    ]}
-                  >
-                    <Text style={styles.loveBtnText}>
-                      {loveBusy ? "Sending…" : `Send ${name} a ❤`}
-                    </Text>
-                  </Pressable>
-                )}
-                {loveError && <Text style={styles.loveError}>{loveError}</Text>}
+            <View style={styles.heroTop}>
+              <View style={[styles.heroIcon, { backgroundColor: cfg.accent + "1F" }]}>
+                <Ionicons name={cfg.icon} size={26} color={cfg.accent} />
               </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.heroTitle}>{cfg.title}</Text>
+                <Text style={styles.heroSub}>{cfg.sub}</Text>
+              </View>
+            </View>
+
+            {status === "in" && !simMissed && (
+              <Tappable
+                onPress={() => void onSendLove()}
+                disabled={loveSent || loveBusy}
+                haptic="medium"
+                accessibilityLabel={loveSent ? "Heart already sent today" : `Send ${name} a heart`}
+                style={[styles.loveBtn, loveSent ? styles.loveBtnSent : null]}
+              >
+                <Text style={styles.loveBtnText}>
+                  {loveSent
+                    ? `❤️  Sent — it'll greet ${name} on their sun`
+                    : loveBusy
+                      ? "Sending…"
+                      : `❤️  Send ${name} a heart`}
+                </Text>
+              </Tappable>
             )}
           </View>
+        </FadeIn>
 
-          {/* Escalation ladder, shown when missed */}
-          {status === "missed" && (
-            <View style={styles.ladder}>
-              <Text style={styles.ladderHead}>
-                ESCALATION LADDER {simMissed ? "(SIMULATED)" : ""}
-              </Text>
-              {ladder.map((s, i) => (
-                <View key={i} style={styles.ladderRow}>
-                  <Text style={styles.ladderTime}>{s.t}</Text>
-                  <Text style={styles.ladderText}>{s.txt}</Text>
-                </View>
-              ))}
-              <Text style={styles.ladderNote}>
-                Real alerts arrive in Phase 4 of the build — this shows what will
-                happen.
-              </Text>
-            </View>
-          )}
+        {/* Stats */}
+        <FadeIn delay={110}>
+          <View style={styles.statRow}>
+            <Stat icon="flame" label="Streak" value={`${streak}`} unit={streak === 1 ? "day" : "days"} tint={T.sunDeep} />
+            <Stat icon="alarm-outline" label="Usual" value={usualTime(history)} tint={T.ink} />
+            <Stat icon="flag-outline" label="Deadline" value={fmtTime(dl)} tint={T.ink} />
+          </View>
+        </FadeIn>
 
-          {/* What the escalation system actually did today */}
-          {(data.todaysAlerts.length > 0 || testActive) && (
-            <View style={styles.alertLog}>
-              <Text style={styles.alertLogHead}>WHAT THE SYSTEM DID TODAY</Text>
-              {testActive && (
-                <Text style={styles.alertTesting}>
-                  ⏱ Test alarm running — new lines appear below within a minute of
-                  each step. Pull down to refresh.
-                </Text>
-              )}
-              {data.todaysAlerts.map((a, i) => (
-                <View key={i} style={styles.alertRow}>
-                  <Text style={styles.alertTime}>
-                    {new Date(a.at).toLocaleTimeString([], {
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })}
-                  </Text>
-                  <Text style={styles.alertText}>
-                    {alertLabel(a, name)}
-                    {"  "}
-                    <Text style={statusStyle(a.status)}>{statusLabel(a.status)}</Text>
-                  </Text>
-                </View>
-              ))}
-            </View>
-          )}
-
-          {/* 14-day history */}
-          <Text style={styles.sectionLabel}>LAST 14 MORNINGS</Text>
-          <View style={styles.daysRow}>
-            {days.map((d) => {
-              const mood = d.rec?.mood ? MOODS[d.rec.mood] : null;
-              const bg = d.rec
-                ? mood
-                  ? mood.bg
-                  : T.leafPale
-                : d.isToday && !pastDeadline
-                  ? T.paper
-                  : T.clayPale;
-              const fg = d.rec ? (mood ? mood.color : T.leaf) : T.clay;
-              return (
-                <View key={d.k} style={{ flex: 1, alignItems: "center" }}>
-                  <View
-                    style={[
-                      styles.dayCell,
-                      {
-                        backgroundColor: bg,
-                        borderColor: d.isToday ? T.ink : T.line,
-                        borderWidth: d.isToday ? 2 : 1.5,
-                      },
-                    ]}
-                  >
-                    <Text style={[styles.dayMark, { color: fg }]}>
-                      {d.rec ? "✓" : d.isToday && !pastDeadline ? "·" : "✕"}
+        {/* 14-day history */}
+        <FadeIn delay={150}>
+          <SectionLabel text="Last 14 mornings" style={{ marginTop: S.xxl }} />
+          <Card padded={false} style={{ paddingVertical: S.lg, paddingHorizontal: S.md }}>
+            <View style={styles.daysRow}>
+              {days.map((d) => {
+                const mood = d.rec?.mood ? MOODS[d.rec.mood] : null;
+                const pending = d.isToday && !pastDeadline && !d.rec;
+                const bg = d.rec ? (mood ? mood.bg : T.leafPale) : pending ? T.panel : T.clayPale;
+                const fg = d.rec ? (mood ? mood.color : T.leaf) : pending ? T.inkFaint : T.clay;
+                return (
+                  <View key={d.k} style={styles.dayCol}>
+                    <View
+                      style={[
+                        styles.dayCell,
+                        {
+                          backgroundColor: bg,
+                          borderColor: d.isToday ? T.ink : "transparent",
+                          borderWidth: d.isToday ? 2 : 0,
+                        },
+                      ]}
+                    >
+                      <Ionicons
+                        name={d.rec ? "checkmark" : pending ? "ellipse" : "close"}
+                        size={d.rec || !pending ? 17 : 6}
+                        color={fg}
+                      />
+                    </View>
+                    <Text style={[styles.dayLetter, d.isToday ? styles.dayLetterToday : null]}>
+                      {d.letter}
                     </Text>
                   </View>
-                  <Text style={styles.dayLetter}>{d.letter}</Text>
+                );
+              })}
+            </View>
+            <View style={styles.legend}>
+              <LegendDot color={T.leaf} label="Checked in" />
+              <LegendDot color={T.clay} label="Missed" />
+              <LegendDot color={T.inkFaint} label="Today, pending" />
+            </View>
+            {Object.keys(history).length === 0 && (
+              <Text style={styles.emptyNote}>
+                This fills in as {name} checks in — day one starts when they enter
+                their invite code.
+              </Text>
+            )}
+          </Card>
+        </FadeIn>
+
+        {/* What the escalation system did today */}
+        {(data.todaysAlerts.length > 0 || testActive) && (
+          <FadeIn delay={180}>
+            <SectionLabel text="What the system did today" style={{ marginTop: S.xxl }} />
+            <Card>
+              {testActive && (
+                <View style={styles.testBanner}>
+                  <Ionicons name="flask" size={16} color={T.sunDeep} />
+                  <Text style={styles.testBannerText}>
+                    Test alarm running — steps appear here within a minute of each
+                    other. Pull down to refresh.
+                  </Text>
                 </View>
-              );
-            })}
-          </View>
+              )}
+              {data.todaysAlerts.map((a, i) => (
+                <View key={i} style={styles.timelineRow}>
+                  <View style={styles.timelineLeft}>
+                    <View style={[styles.timelineDot, { backgroundColor: dotColor(a) }]} />
+                    {i < data.todaysAlerts.length - 1 && <View style={styles.timelineLine} />}
+                  </View>
+                  <View style={{ flex: 1, paddingBottom: S.lg }}>
+                    <Text style={styles.timelineTime}>
+                      {new Date(a.at).toLocaleTimeString([], {
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })}
+                    </Text>
+                    <Text style={styles.timelineText}>{alertLabel(a, name)}</Text>
+                    <Text style={[styles.timelineStatus, { color: statusColor(a.status) }]}>
+                      {statusLabel(a.status)}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </Card>
+          </FadeIn>
+        )}
 
-          {Object.keys(history).length === 0 && (
-            <Text style={styles.emptyNote}>
-              History fills in as {name} checks in each morning — day one starts
-              when they enter their invite code.
+        {/* Testing */}
+        <FadeIn delay={210}>
+          <SectionLabel text="Testing" style={{ marginTop: S.xxl }} />
+          <Card>
+            <View style={styles.testRow}>
+              <GhostButton
+                label={simMissed ? "End preview" : "Preview a missed morning"}
+                icon="eye-outline"
+                onPress={() => setSimMissed(!simMissed)}
+              />
+              <GhostButton
+                label={testActive ? "Test running…" : testBusy ? "Starting…" : "Test the real alarm"}
+                icon="flask-outline"
+                tone="clay"
+                onPress={() => void onStartTest()}
+              />
+            </View>
+            <Text style={styles.testNote}>
+              <Text style={{ fontFamily: F.bold }}>Preview</Text> only changes this
+              screen.{" "}
+              <Text style={{ fontFamily: F.bold }}>Test the real alarm</Text> asks the
+              server to run a fake missed morning — reminder, your alert, then the
+              backup — compressed into about five minutes and logged above.
             </Text>
-          )}
-
-          {/* Stats */}
-          <View style={styles.statRow}>
-            <Stat label="Streak" value={`${streak} days`} />
-            <Stat label="Usual time" value={usualTime(history)} />
-            <Stat label="Deadline" value={fmtTime(dl)} />
-          </View>
-
-          {/* Testing controls */}
-          <View style={styles.demoRow}>
-            <Text style={styles.demoLabel}>TESTING</Text>
-            <GhostButton
-              label={simMissed ? "End preview" : "Preview a missed morning"}
-              onPress={() => setSimMissed(!simMissed)}
-            />
-            <GhostButton
-              label={
-                testActive
-                  ? "Test alarm running…"
-                  : testBusy
-                    ? "Starting…"
-                    : "Test the real alarm (3 min)"
-              }
-              onPress={() => void onStartTest()}
-            />
-          </View>
-          {testError && <Text style={styles.loveError}>{testError}</Text>}
-          <Text style={styles.testNote}>
-            "Preview" only changes this screen. "Test the real alarm" asks the server
-            to run a fake missed morning: reminder → alert → backup, compressed into
-            ~5 minutes, logged above. Texts and phone alerts switch on once Twilio and
-            the TestFlight build are connected.
-          </Text>
-        </View>
+            {note && <Text style={styles.noteError}>{note}</Text>}
+          </Card>
+        </FadeIn>
       </ScrollView>
       <RoleTabs />
     </SafeAreaView>
+  );
+}
+
+function Stat({
+  icon,
+  label,
+  value,
+  unit,
+  tint,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: string;
+  unit?: string;
+  tint: string;
+}) {
+  return (
+    <View style={[styles.stat, shadow(1)]}>
+      <Ionicons name={icon} size={16} color={tint} />
+      <Text style={styles.statValue} numberOfLines={1}>
+        {value}
+        {unit ? <Text style={styles.statUnit}> {unit}</Text> : null}
+      </Text>
+      <Text style={styles.statLabel}>{label.toUpperCase()}</Text>
+    </View>
+  );
+}
+
+function LegendDot({ color, label }: { color: string; label: string }) {
+  return (
+    <View style={styles.legendItem}>
+      <View style={[styles.legendDot, { backgroundColor: color }]} />
+      <Text style={styles.legendText}>{label}</Text>
+    </View>
   );
 }
 
@@ -311,7 +348,7 @@ function alertLabel(a: AlertRow, parentName: string): string {
   const test = a.isTest ? " (test)" : "";
   switch (a.kind) {
     case "reminder":
-      return `Reminder to ${parentName}${test}`;
+      return `Reminder sent to ${parentName}${test}`;
     case "primary":
       return a.channel === "sms"
         ? `Alert text to ${a.target}${test}`
@@ -321,168 +358,161 @@ function alertLabel(a: AlertRow, parentName: string): string {
     case "allclear":
       return a.channel === "sms"
         ? `False-alarm text to ${a.target}`
-        : `False-alarm notice to your phone`;
+        : "False-alarm notice to your phone";
     case "notgreat":
       return `"Not great" heads-up to your phone`;
   }
 }
 
-function statusLabel(s: string): string {
-  if (s === "sent") return "✓ sent";
-  if (s === "skipped") return "· logged (delivery arrives with Twilio/TestFlight)";
-  if (s === "failed") return "✕ failed";
-  return "…";
-}
+const statusLabel = (s: string) =>
+  s === "sent"
+    ? "Delivered"
+    : s === "skipped"
+      ? "Logged — delivery arrives with Twilio / TestFlight"
+      : s === "failed"
+        ? "Failed"
+        : "Pending";
 
-function statusStyle(s: string) {
-  return {
-    fontFamily: F.bold,
-    color: s === "sent" ? T.leaf : s === "failed" ? T.clay : T.inkSoft,
-  };
-}
+const statusColor = (s: string) =>
+  s === "sent" ? T.leaf : s === "failed" ? T.clay : T.inkFaint;
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.stat}>
-      <Text style={styles.statLabel}>{label.toUpperCase()}</Text>
-      <Text style={styles.statValue}>{value}</Text>
-    </View>
-  );
-}
+const dotColor = (a: AlertRow) =>
+  a.kind === "allclear" ? T.leaf : a.kind === "reminder" ? T.sunDeep : T.clay;
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: T.sky },
-  scroll: { padding: 16, paddingTop: 46, paddingBottom: 24 },
-  card: {
-    backgroundColor: T.paper,
-    borderRadius: 30,
-    padding: 24,
-    borderWidth: 1,
-    borderColor: T.line,
-  },
-  h2: { fontFamily: F.serif, fontSize: 30, color: T.ink, marginTop: 6, marginBottom: 18 },
-  status: { borderWidth: 2, borderRadius: 18, padding: 18, marginBottom: 20 },
-  statusTitle: { fontFamily: F.extra, fontSize: 21, color: T.ink, lineHeight: 27 },
-  statusSub: { fontFamily: F.body, fontSize: 16, color: T.inkSoft, marginTop: 6 },
-  ladder: {
-    borderWidth: 1,
-    borderStyle: "dashed",
-    borderColor: T.clay,
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 20,
-  },
-  ladderHead: {
+  scroll: { paddingHorizontal: S.xl, paddingTop: S.md, paddingBottom: S.xxl },
+
+  header: { flexDirection: "row", alignItems: "center", marginBottom: S.xl },
+  headerKicker: {
     fontFamily: F.extra,
-    fontSize: 13,
-    color: T.clay,
+    fontSize: 11,
     letterSpacing: 1.5,
-    marginBottom: 8,
+    color: T.inkFaint,
   },
-  ladderRow: { flexDirection: "row", gap: 10, paddingVertical: 5 },
-  ladderTime: { fontFamily: F.extra, fontSize: 15, color: T.clay, minWidth: 74 },
-  ladderText: { fontFamily: F.body, fontSize: 15, color: T.ink, flex: 1 },
-  ladderNote: { fontFamily: F.body, fontSize: 13, color: T.inkSoft, marginTop: 8 },
-  sectionLabel: {
-    fontFamily: F.bold,
-    fontSize: 14,
-    color: T.inkSoft,
-    marginBottom: 8,
-  },
-  daysRow: {
-    flexDirection: "row",
-    gap: 5,
-    backgroundColor: T.panel,
-    borderWidth: 1,
-    borderColor: T.line,
-    borderRadius: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 10,
-    marginBottom: 20,
-  },
-  dayCell: {
+  headerName: { fontFamily: F.display, fontSize: 27, color: T.ink, marginTop: 2 },
+  gear: {
+    width: 40,
     height: 40,
-    alignSelf: "stretch",
-    width: "100%",
-    borderRadius: 8,
+    borderRadius: 20,
+    backgroundColor: T.paper,
+    borderWidth: 1,
+    borderColor: T.lineSoft,
     alignItems: "center",
     justifyContent: "center",
   },
-  dayMark: { fontFamily: F.serif, fontSize: 17 },
-  dayLetter: { fontFamily: F.body, fontSize: 11, color: T.inkSoft, marginTop: 4 },
-  statRow: { flexDirection: "row", gap: 12, marginBottom: 4 },
-  stat: {
-    flex: 1,
-    backgroundColor: T.panel,
-    borderWidth: 1,
-    borderColor: T.line,
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-  },
-  statLabel: { fontFamily: F.bold, fontSize: 12, color: T.inkSoft },
-  statValue: { fontFamily: F.extra, fontSize: 18, color: T.ink, marginTop: 2 },
-  demoRow: {
-    marginTop: 18,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: T.line,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
+
+  hero: { borderRadius: R.xl, borderWidth: 1, padding: S.xl },
+  heroTop: { flexDirection: "row", alignItems: "flex-start" },
+  heroIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: "center",
+    justifyContent: "center",
+    marginRight: S.lg,
   },
-  demoLabel: { fontFamily: F.bold, fontSize: 13, color: T.inkSoft },
-  emptyNote: {
+  heroTitle: { fontFamily: F.display, fontSize: 22, lineHeight: 28, color: T.ink },
+  heroSub: {
     fontFamily: F.body,
-    fontSize: 14,
+    fontSize: 15,
+    lineHeight: 21,
     color: T.inkSoft,
-    lineHeight: 20,
-    marginTop: -10,
-    marginBottom: 18,
+    marginTop: 4,
   },
   loveBtn: {
+    marginTop: S.lg,
     backgroundColor: T.paper,
+    borderRadius: R.pill,
     borderWidth: 1.5,
-    borderColor: T.clay,
-    borderRadius: 999,
-    paddingVertical: 9,
-    paddingHorizontal: 16,
-    alignSelf: "flex-start",
+    borderColor: T.clayLine,
+    paddingVertical: 12,
+    alignItems: "center",
   },
+  loveBtnSent: { backgroundColor: "transparent", borderStyle: "dashed" },
   loveBtnText: { fontFamily: F.bold, fontSize: 15, color: T.clay },
-  loveSent: { fontFamily: F.semi, fontSize: 15, color: T.clay },
-  loveError: { fontFamily: F.body, fontSize: 13, color: T.clay, marginTop: 6 },
-  alertLog: {
-    backgroundColor: T.panel,
+
+  statRow: { flexDirection: "row", gap: S.md, marginTop: S.lg },
+  stat: {
+    flex: 1,
+    backgroundColor: T.paper,
+    borderRadius: R.lg,
     borderWidth: 1,
-    borderColor: T.line,
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 20,
+    borderColor: T.lineSoft,
+    paddingVertical: S.lg,
+    paddingHorizontal: S.md,
+    alignItems: "center",
   },
-  alertLogHead: {
+  statValue: { fontFamily: F.extra, fontSize: 20, color: T.ink, marginTop: 6 },
+  statUnit: { fontFamily: F.semi, fontSize: 13, color: T.inkSoft },
+  statLabel: {
     fontFamily: F.extra,
-    fontSize: 12,
-    letterSpacing: 1.5,
-    color: T.inkSoft,
-    marginBottom: 8,
+    fontSize: 10,
+    letterSpacing: 1.2,
+    color: T.inkFaint,
+    marginTop: 3,
   },
-  alertTesting: {
+
+  daysRow: { flexDirection: "row", gap: 4 },
+  dayCol: { flex: 1, alignItems: "center" },
+  dayCell: {
+    width: "100%",
+    height: 42,
+    borderRadius: R.sm,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dayLetter: {
     fontFamily: F.semi,
-    fontSize: 14,
-    color: T.sunDeep,
-    marginBottom: 8,
-    lineHeight: 20,
+    fontSize: 11,
+    color: T.inkFaint,
+    marginTop: 5,
   },
-  alertRow: { flexDirection: "row", gap: 10, paddingVertical: 4 },
-  alertTime: { fontFamily: F.bold, fontSize: 13, color: T.inkSoft, minWidth: 64 },
-  alertText: { fontFamily: F.body, fontSize: 14, color: T.ink, flex: 1, lineHeight: 20 },
-  testNote: {
-    fontFamily: F.body,
-    fontSize: 13,
-    color: T.inkSoft,
+  dayLetterToday: { color: T.ink, fontFamily: F.extra },
+  legend: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: S.md,
+    marginTop: S.lg,
+    paddingTop: S.md,
+    borderTopWidth: 1,
+    borderTopColor: T.lineSoft,
+  },
+  legendItem: { flexDirection: "row", alignItems: "center", gap: 5 },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendText: { fontFamily: F.body, fontSize: 12, color: T.inkSoft },
+  emptyNote: { ...ty.small, marginTop: S.md },
+
+  testBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: S.sm,
+    backgroundColor: T.sunPale,
+    borderRadius: R.md,
+    padding: S.md,
+    marginBottom: S.lg,
+  },
+  testBannerText: {
+    fontFamily: F.semi,
+    fontSize: 13.5,
     lineHeight: 19,
-    marginTop: 10,
+    color: T.sunDeep,
+    flex: 1,
   },
+  timelineRow: { flexDirection: "row" },
+  timelineLeft: { width: 22, alignItems: "center" },
+  timelineDot: { width: 10, height: 10, borderRadius: 5, marginTop: 4 },
+  timelineLine: { width: 2, flex: 1, backgroundColor: T.lineSoft, marginVertical: 3 },
+  timelineTime: {
+    fontFamily: F.extra,
+    fontSize: 11,
+    letterSpacing: 0.8,
+    color: T.inkFaint,
+  },
+  timelineText: { fontFamily: F.semi, fontSize: 15, color: T.ink, marginTop: 2 },
+  timelineStatus: { fontFamily: F.body, fontSize: 12.5, marginTop: 2 },
+
+  testRow: { flexDirection: "row", flexWrap: "wrap", gap: S.sm },
+  testNote: { ...ty.small, marginTop: S.md },
+  noteError: { fontFamily: F.semi, fontSize: 13, color: T.clay, marginTop: S.sm },
 });

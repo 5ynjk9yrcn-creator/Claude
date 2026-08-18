@@ -1,22 +1,23 @@
 import { Ionicons } from "@expo/vector-icons";
 import { usePathname, useRouter } from "expo-router";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { useStore } from "../lib/store";
-import { F, T } from "../lib/theme";
+import { F, R, S, T, shadow } from "../lib/theme";
+import { Tappable } from "./ui";
 
-/* Gear button shown top-right on the two home screens. */
+/* Floating gear, top-right of the two home screens. */
 export function SettingsButton() {
   const router = useRouter();
   return (
-    <Pressable
-      onPress={() => router.push("/settings")}
-      accessibilityRole="button"
-      accessibilityLabel="Open settings"
-      hitSlop={10}
-      style={({ pressed }) => [styles.gear, pressed ? { opacity: 0.6 } : null]}
-    >
-      <Ionicons name="settings-outline" size={24} color={T.inkSoft} />
-    </Pressable>
+    <View style={styles.gearWrap}>
+      <Tappable
+        onPress={() => router.push("/settings")}
+        accessibilityLabel="Open settings"
+        style={[styles.gear, shadow(1)]}
+      >
+        <Ionicons name="settings-outline" size={21} color={T.inkSoft} />
+      </Tappable>
+    </View>
   );
 }
 
@@ -38,61 +39,66 @@ export function RoleTabs() {
   ];
 
   return (
-    <View style={styles.tabs}>
-      {tabs.map((t) => {
-        const active = pathname === t.href;
-        return (
-          <Pressable
-            key={t.href}
-            onPress={() => {
-              if (!active) router.replace(t.href as "/parent-home" | "/family");
-            }}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: active }}
-            style={[styles.tab, active ? styles.tabActive : null]}
-          >
-            <Ionicons
-              name={active ? t.icon : (`${t.icon}-outline` as const)}
-              size={20}
-              color={active ? T.paper : T.ink}
-            />
-            <Text style={[styles.tabText, { color: active ? T.paper : T.ink }]}>
-              {t.label}
-            </Text>
-          </Pressable>
-        );
-      })}
+    <View style={styles.tabsWrap}>
+      <View style={[styles.tabs, shadow(2)]}>
+        {tabs.map((t) => {
+          const active = pathname === t.href;
+          return (
+            <Tappable
+              key={t.href}
+              accessibilityRole="tab"
+              accessibilityLabel={t.label}
+              onPress={() => {
+                if (!active) router.replace(t.href as "/parent-home" | "/family");
+              }}
+              style={[styles.tab, active ? styles.tabActive : null]}
+            >
+              <View style={styles.tabInner}>
+                <Ionicons
+                  name={active ? t.icon : (`${t.icon}-outline` as const)}
+                  size={18}
+                  color={active ? T.paper : T.inkSoft}
+                />
+                <Text
+                  style={[styles.tabText, { color: active ? T.paper : T.inkSoft }]}
+                  numberOfLines={1}
+                >
+                  {t.label}
+                </Text>
+              </View>
+            </Tappable>
+          );
+        })}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  gearWrap: { position: "absolute", top: S.sm, right: S.xl, zIndex: 20 },
   gear: {
-    position: "absolute",
-    top: 10,
-    right: 18,
-    zIndex: 10,
-    padding: 8,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "rgba(255,255,255,0.9)",
+    borderWidth: 1,
+    borderColor: T.lineSoft,
+    alignItems: "center",
+    justifyContent: "center",
   },
+
+  tabsWrap: { alignItems: "center", paddingBottom: S.md, paddingTop: S.xs },
   tabs: {
     flexDirection: "row",
-    gap: 6,
     backgroundColor: T.paper,
-    borderWidth: 1.5,
-    borderColor: T.line,
-    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: T.lineSoft,
+    borderRadius: R.pill,
     padding: 5,
-    alignSelf: "center",
-    marginBottom: 10,
+    gap: 4,
   },
-  tab: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-    paddingVertical: 9,
-    paddingHorizontal: 18,
-    borderRadius: 999,
-  },
+  tab: { borderRadius: R.pill, paddingVertical: 10, paddingHorizontal: S.xl },
   tabActive: { backgroundColor: T.ink },
-  tabText: { fontFamily: F.bold, fontSize: 15 },
+  tabInner: { flexDirection: "row", alignItems: "center", gap: 7 },
+  tabText: { fontFamily: F.bold, fontSize: 14.5, maxWidth: 120 },
 });

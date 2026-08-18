@@ -1,11 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   Share,
   StyleSheet,
@@ -14,21 +13,22 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { DeadlinePicker, GhostButton } from "../components/ui";
 import {
-  fmtDeadline,
-  formatInviteCode,
-  useStore,
-  type Contact,
-} from "../lib/store";
-import { F, T } from "../lib/theme";
+  Card,
+  DeadlinePicker,
+  FadeIn,
+  GhostButton,
+  SectionLabel,
+  Tappable,
+} from "../components/ui";
+import { fmtDeadline, formatInviteCode, useStore, type Contact } from "../lib/store";
+import { F, R, S, T, shadow, type as ty } from "../lib/theme";
 
 export default function Settings() {
   const router = useRouter();
   const { data, saveSettings, eraseEverything } = useStore();
 
-  // Draft values commit to the cloud when a field loses focus,
-  // so we don't send a request per keystroke.
+  // Drafts commit on blur, so we don't hit the server on every keystroke.
   const [myName, setMyName] = useState(data?.myName ?? "");
   const [parentName, setParentName] = useState(data?.parentName ?? "");
   const [contacts, setContacts] = useState<Contact[]>([
@@ -42,15 +42,14 @@ export default function Settings() {
   const displayParent = data.parentName || "your parent";
   const code = data.inviteCode ? formatInviteCode(data.inviteCode) : null;
 
-  const commitContacts = () => {
+  const commitContacts = () =>
     saveSettings({
       contacts: contacts
         .filter((c) => c.name.trim() || c.phone.trim())
         .map((c, i) => ({ ...c, isPrimary: i === 0 })),
     });
-  };
 
-  const confirmReset = () => {
+  const confirmReset = () =>
     Alert.alert(
       "Sign out & reset this phone?",
       "This signs you out and clears the app on this phone. Your circle stays safe in the cloud — sign back in to get it back.",
@@ -59,16 +58,14 @@ export default function Settings() {
         {
           text: "Sign out & reset",
           style: "destructive",
-          onPress: () => {
+          onPress: () =>
             void eraseEverything().then(() => {
               router.dismissAll();
               router.replace("/welcome");
-            });
-          },
+            }),
         },
       ]
     );
-  };
 
   const inviteAgain = async () => {
     const from = data.contacts.find((c) => c.isPrimary)?.name || "your family";
@@ -90,242 +87,286 @@ export default function Settings() {
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <ScrollView contentContainerStyle={styles.wrap} keyboardShouldPersistTaps="handled">
-          <View style={styles.topRow}>
-            <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backBtn}>
-              <Ionicons name="chevron-back" size={22} color={T.ink} />
-              <Text style={styles.backText}>Done</Text>
-            </Pressable>
-            <Text style={styles.title}>Settings</Text>
-            <View style={{ width: 70 }} />
-          </View>
+        <View style={styles.header}>
+          <Tappable
+            onPress={() => router.back()}
+            accessibilityLabel="Close settings"
+            style={styles.back}
+          >
+            <Ionicons name="chevron-back" size={22} color={T.ink} />
+          </Tappable>
+          <Text style={styles.headerTitle}>Settings</Text>
+          <View style={{ width: 38 }} />
+        </View>
 
+        <ScrollView
+          contentContainerStyle={styles.wrap}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           {checksIn && (
-            <Section title="My check-in">
-              <Row label="My name">
-                <TextInput
-                  value={myName}
-                  onChangeText={setMyName}
-                  onEndEditing={() => saveSettings({ myName: myName.trim() })}
-                  style={styles.input}
-                  placeholder="Your first name"
-                  placeholderTextColor={T.inkSoft}
-                />
-              </Row>
+            <FadeIn>
+              <SectionLabel text="My check-in" />
+              <Card padded={false} style={styles.group}>
+                <Row icon="person-outline" label="My name">
+                  <TextInput
+                    value={myName}
+                    onChangeText={setMyName}
+                    onEndEditing={() => saveSettings({ myName: myName.trim() })}
+                    style={styles.rowInput}
+                    placeholder="First name"
+                    placeholderTextColor={T.inkFaint}
+                  />
+                </Row>
+                {data.role === "parent" && (
+                  <Row icon="flag-outline" label="Deadline" last>
+                    <Text style={styles.rowValue}>{fmtDeadline(data.deadline)}</Text>
+                  </Row>
+                )}
+              </Card>
               {data.role === "parent" && (
                 <Text style={styles.note}>
-                  Your daily deadline is {fmtDeadline(data.deadline)} — your family
-                  sets it from their phone.
+                  Your family sets the deadline from their phone.
                 </Text>
               )}
-            </Section>
+            </FadeIn>
           )}
 
           {watches && (
             <>
-              <Section title={`Watching over ${displayParent}`}>
-                <Row label="Their name">
-                  <TextInput
-                    value={parentName}
-                    onChangeText={setParentName}
-                    onEndEditing={() => saveSettings({ parentName: parentName.trim() })}
-                    style={styles.input}
-                    placeholder="First name"
-                    placeholderTextColor={T.inkSoft}
-                  />
-                </Row>
-                <Row label="Daily deadline">
-                  <DeadlinePicker
-                    value={data.deadline}
-                    onChange={(v) => saveSettings({ deadline: v })}
-                  />
-                </Row>
+              <FadeIn delay={50}>
+                <SectionLabel text={`Watching over ${displayParent}`} style={{ marginTop: S.xxl }} />
+                <Card padded={false} style={styles.group}>
+                  <Row icon="person-outline" label="Their name">
+                    <TextInput
+                      value={parentName}
+                      onChangeText={setParentName}
+                      onEndEditing={() => saveSettings({ parentName: parentName.trim() })}
+                      style={styles.rowInput}
+                      placeholder="First name"
+                      placeholderTextColor={T.inkFaint}
+                    />
+                  </Row>
+                  <Row icon="flag-outline" label="Daily deadline" last>
+                    <DeadlinePicker
+                      value={data.deadline}
+                      onChange={(v) => saveSettings({ deadline: v })}
+                    />
+                  </Row>
+                </Card>
                 <Text style={styles.note}>
-                  If {displayParent} hasn't checked in by {fmtDeadline(data.deadline)},
-                  alerts begin. The deadline follows {data.timezone} —{" "}
-                  {displayParent}'s timezone.
+                  Alerts begin if {displayParent} hasn't checked in by{" "}
+                  {fmtDeadline(data.deadline)}. Times follow {data.timezone}.
                 </Text>
-              </Section>
+              </FadeIn>
 
-              <Section title="Alert contacts">
-                {[0, 1].map((i) => (
-                  <View key={i} style={styles.contactBlock}>
-                    <Text style={styles.contactHead}>
-                      {i === 0 ? "First alerted (you)" : "Backup — alerted 20 min later"}
-                    </Text>
-                    <View style={styles.contactRow}>
-                      <TextInput
-                        value={contacts[i].name}
-                        onChangeText={(v) =>
-                          setContacts((cs) =>
-                            cs.map((c, j) => (j === i ? { ...c, name: v } : c))
-                          )
-                        }
-                        onEndEditing={commitContacts}
-                        style={[styles.input, { flex: 1 }]}
-                        placeholder="Name"
-                        placeholderTextColor={T.inkSoft}
-                      />
-                      <TextInput
-                        value={contacts[i].phone}
-                        onChangeText={(v) =>
-                          setContacts((cs) =>
-                            cs.map((c, j) => (j === i ? { ...c, phone: v } : c))
-                          )
-                        }
-                        onEndEditing={commitContacts}
-                        style={[styles.input, { flex: 1.3 }]}
-                        placeholder="Mobile number"
-                        placeholderTextColor={T.inkSoft}
-                        keyboardType="phone-pad"
-                      />
+              <FadeIn delay={90}>
+                <SectionLabel text="Alert contacts" style={{ marginTop: S.xxl }} />
+                <Card>
+                  {[0, 1].map((i) => (
+                    <View key={i} style={i === 0 ? styles.contactBlock : null}>
+                      <Text style={styles.contactHead}>
+                        {i === 0 ? "FIRST ALERTED (YOU)" : "BACKUP — 20 MIN LATER"}
+                      </Text>
+                      <View style={styles.contactRow}>
+                        <TextInput
+                          value={contacts[i].name}
+                          onChangeText={(v) =>
+                            setContacts((cs) => cs.map((c, j) => (j === i ? { ...c, name: v } : c)))
+                          }
+                          onEndEditing={commitContacts}
+                          style={[styles.boxInput, { flex: 1 }]}
+                          placeholder="Name"
+                          placeholderTextColor={T.inkFaint}
+                        />
+                        <TextInput
+                          value={contacts[i].phone}
+                          onChangeText={(v) =>
+                            setContacts((cs) => cs.map((c, j) => (j === i ? { ...c, phone: v } : c)))
+                          }
+                          onEndEditing={commitContacts}
+                          style={[styles.boxInput, { flex: 1.35 }]}
+                          placeholder="Mobile number"
+                          placeholderTextColor={T.inkFaint}
+                          keyboardType="phone-pad"
+                        />
+                      </View>
                     </View>
-                  </View>
-                ))}
-              </Section>
+                  ))}
+                </Card>
+              </FadeIn>
 
-              <Section title="Invite">
-                {code && (
-                  <View style={styles.codeCard}>
-                    <Text style={styles.codeLabel}>
-                      {displayParent.toUpperCase()}'S CODE
-                    </Text>
-                    <Text style={styles.code}>{code}</Text>
-                  </View>
-                )}
-                <GhostButton
-                  label={`Text the invite to ${displayParent} ✉`}
-                  onPress={inviteAgain}
-                />
-                <Text style={styles.note}>
-                  {displayParent} enters this code once under “I'm checking in” and
-                  their phone is fully set up.
-                </Text>
-              </Section>
+              <FadeIn delay={130}>
+                <SectionLabel text="Invite" style={{ marginTop: S.xxl }} />
+                <Card>
+                  {code && (
+                    <View style={styles.codeCard}>
+                      <Text style={styles.codeLabel}>{displayParent.toUpperCase()}'S CODE</Text>
+                      <Text style={styles.code}>{code}</Text>
+                    </View>
+                  )}
+                  <GhostButton
+                    label={`Text the invite to ${displayParent}`}
+                    icon="send-outline"
+                    onPress={inviteAgain}
+                  />
+                  <Text style={[styles.note, { marginTop: S.md, marginLeft: 0 }]}>
+                    They enter this code once under “I'm checking in” and their phone
+                    is fully set up.
+                  </Text>
+                </Card>
+              </FadeIn>
             </>
           )}
 
-          <Section title="Notifications">
-            <Text style={styles.note}>
-              Gentle reminders{checksIn ? " for you" : ` for ${displayParent}`} an hour
-              before the deadline, and alert texts when a morning is missed, switch on
-              in Phase 4 of the build — they run from our server, not this phone.
-            </Text>
-          </Section>
+          <FadeIn delay={170}>
+            <SectionLabel text="Notifications" style={{ marginTop: S.xxl }} />
+            <Card>
+              <View style={styles.infoRow}>
+                <Ionicons name="notifications-outline" size={18} color={T.inkSoft} />
+                <Text style={[ty.small, { flex: 1 }]}>
+                  Reminders{checksIn ? " for you" : ` for ${displayParent}`} an hour
+                  before the deadline, and alert texts when a morning is missed, run
+                  from our server — not from this phone. Text delivery switches on
+                  with Twilio; phone alerts with the TestFlight build.
+                </Text>
+              </View>
+            </Card>
+          </FadeIn>
 
-          <Section title="Account">
-            <Pressable onPress={confirmReset} style={styles.dangerBtn}>
-              <Text style={styles.dangerText}>Sign out & reset this phone</Text>
-            </Pressable>
-          </Section>
-
-          <Text style={styles.version}>OK Today — Phase 2 preview</Text>
+          <FadeIn delay={200}>
+            <SectionLabel text="Account" style={{ marginTop: S.xxl }} />
+            <Card>
+              <GhostButton
+                label="Sign out & reset this phone"
+                icon="log-out-outline"
+                tone="clay"
+                onPress={confirmReset}
+              />
+            </Card>
+            <Text style={styles.version}>OK Today — preview build</Text>
+          </FadeIn>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Row({
+  icon,
+  label,
+  children,
+  last,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  children: ReactNode;
+  last?: boolean;
+}) {
   return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title.toUpperCase()}</Text>
-      <View style={styles.card}>{children}</View>
-    </View>
-  );
-}
-
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <View style={styles.row}>
+    <View style={[styles.row, last ? null : styles.rowBorder]}>
+      <Ionicons name={icon} size={19} color={T.inkSoft} style={{ marginRight: S.md }} />
       <Text style={styles.rowLabel}>{label}</Text>
-      <View style={styles.rowControl}>{children}</View>
+      <View style={styles.rowRight}>{children}</View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: T.sky },
-  wrap: { padding: 20, paddingBottom: 60 },
-  topRow: {
+  header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 18,
+    paddingHorizontal: S.xl,
+    paddingTop: S.sm,
+    paddingBottom: S.md,
   },
-  backBtn: { flexDirection: "row", alignItems: "center", width: 70 },
-  backText: { fontFamily: F.bold, fontSize: 17, color: T.ink },
-  title: { fontFamily: F.serif, fontSize: 24, color: T.ink },
-  section: { marginBottom: 22 },
-  sectionTitle: {
-    fontFamily: F.bold,
-    fontSize: 13,
-    letterSpacing: 1.5,
-    color: T.inkSoft,
-    marginBottom: 8,
-    marginLeft: 4,
-  },
-  card: {
+  back: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: T.paper,
     borderWidth: 1,
-    borderColor: T.line,
-    borderRadius: 16,
-    padding: 16,
+    borderColor: T.lineSoft,
+    alignItems: "center",
+    justifyContent: "center",
   },
+  headerTitle: { fontFamily: F.display, fontSize: 23, color: T.ink },
+  wrap: { paddingHorizontal: S.xl, paddingBottom: S.xxxl },
+
+  group: { overflow: "hidden" },
   row: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 12,
+    paddingVertical: S.lg,
+    paddingHorizontal: S.xl,
+    minHeight: 60,
   },
-  rowLabel: { fontFamily: F.bold, fontSize: 16, color: T.ink, flex: 1 },
-  rowControl: { flex: 1.4, alignItems: "flex-end" },
-  input: {
+  rowBorder: { borderBottomWidth: 1, borderBottomColor: T.lineSoft },
+  rowLabel: { fontFamily: F.semi, fontSize: 16, color: T.ink, flex: 1 },
+  rowRight: { alignItems: "flex-end", flex: 1.1 },
+  rowValue: { fontFamily: F.bold, fontSize: 16, color: T.inkSoft },
+  rowInput: {
+    fontFamily: F.bold,
+    fontSize: 16,
+    color: T.ink,
+    textAlign: "right",
+    minWidth: 120,
+    paddingVertical: 2,
+  },
+
+  note: { ...ty.small, marginTop: S.sm, marginLeft: S.xs },
+
+  contactBlock: { marginBottom: S.xl },
+  contactHead: {
+    fontFamily: F.extra,
+    fontSize: 10.5,
+    letterSpacing: 1.3,
+    color: T.inkFaint,
+    marginBottom: S.sm,
+  },
+  contactRow: { flexDirection: "row", gap: S.sm },
+  boxInput: {
     borderWidth: 1.5,
     borderColor: T.line,
-    borderRadius: 10,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    fontSize: 16,
+    borderRadius: R.md,
+    paddingVertical: 11,
+    paddingHorizontal: S.md,
+    fontSize: 15.5,
     fontFamily: F.body,
     color: T.ink,
     backgroundColor: T.paper,
-    minWidth: 140,
   },
-  note: { fontFamily: F.body, fontSize: 14, color: T.inkSoft, lineHeight: 20, marginTop: 4 },
-  contactBlock: { marginBottom: 14 },
-  contactHead: { fontFamily: F.bold, fontSize: 13, color: T.inkSoft, marginBottom: 7 },
-  contactRow: { flexDirection: "row", gap: 8 },
+
   codeCard: {
-    backgroundColor: T.panel,
-    borderWidth: 2,
-    borderColor: T.sunDeep,
-    borderRadius: 14,
-    paddingVertical: 12,
+    backgroundColor: T.sunPale,
+    borderWidth: 1.5,
+    borderColor: "#EBCF8C",
+    borderRadius: R.lg,
+    paddingVertical: S.md,
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: S.lg,
   },
   codeLabel: {
-    fontFamily: F.bold,
-    fontSize: 11,
-    letterSpacing: 2,
-    color: T.inkSoft,
-    marginBottom: 4,
+    fontFamily: F.extra,
+    fontSize: 10,
+    letterSpacing: 1.5,
+    color: T.sunDeep,
   },
-  code: { fontFamily: F.extra, fontSize: 26, color: T.ink, letterSpacing: 2 },
-  dangerBtn: {
-    borderWidth: 1.5,
-    borderColor: T.clay,
-    borderRadius: 999,
-    paddingVertical: 10,
-    alignItems: "center",
+  code: {
+    fontFamily: F.extra,
+    fontSize: 26,
+    letterSpacing: 3,
+    color: T.ink,
+    marginTop: 3,
   },
-  dangerText: { fontFamily: F.bold, fontSize: 15, color: T.clay },
+
+  infoRow: { flexDirection: "row", gap: S.md, alignItems: "flex-start" },
   version: {
-    fontFamily: F.body,
-    fontSize: 13,
-    color: T.inkSoft,
+    ...ty.small,
     textAlign: "center",
-    marginTop: 6,
+    marginTop: S.xl,
+    color: T.inkFaint,
   },
 });

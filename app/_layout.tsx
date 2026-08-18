@@ -8,7 +8,7 @@ import { YoungSerif_400Regular } from "@expo-google-fonts/young-serif";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { Text, View } from "react-native";
+import { Splash } from "../components/Splash";
 import { StoreProvider } from "../lib/store";
 import { T } from "../lib/theme";
 
@@ -21,20 +21,7 @@ export default function RootLayout() {
     Karla_800ExtraBold,
   });
 
-  if (!fontsLoaded) {
-    return (
-      <View
-        style={{
-          flex: 1,
-          backgroundColor: T.sky,
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <Text style={{ color: T.inkSoft, fontSize: 18 }}>Warming up the sun…</Text>
-      </View>
-    );
-  }
+  if (!fontsLoaded) return <Splash fontsReady={false} />;
 
   return (
     <StoreProvider>
@@ -43,8 +30,11 @@ export default function RootLayout() {
         screenOptions={{
           headerShown: false,
           contentStyle: { backgroundColor: T.sky },
+          animation: "slide_from_right",
         }}
-      />
+      >
+        <Stack.Screen name="settings" options={{ animation: "slide_from_bottom" }} />
+      </Stack>
     </StoreProvider>
   );
 }

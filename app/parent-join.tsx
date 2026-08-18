@@ -1,29 +1,31 @@
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { BigButton } from "../components/ui";
+import { SunMark } from "../components/Sun";
+import { Button, ErrorNote, FadeIn, Tappable } from "../components/ui";
 import { useStore } from "../lib/store";
-import { F, T } from "../lib/theme";
+import { F, R, S, T, shadow, type as ty } from "../lib/theme";
 
 /* Parent-side entry: type the short code from the family's text message.
-   Everything else — name, deadline, timezone — comes with the code. */
+   Everything else — name, deadline, timezone — arrives with the code. */
 export default function ParentJoin() {
   const router = useRouter();
   const { claimInvite } = useStore();
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [focused, setFocused] = useState(false);
 
   const cleaned = code.replace(/[^a-zA-Z0-9]/g, "");
   const canGo = cleaned.length >= 8;
@@ -42,97 +44,122 @@ export default function ParentJoin() {
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-        <View style={styles.wrap}>
-          <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={22} color={T.ink} />
-            <Text style={styles.backText}>Back</Text>
-          </Pressable>
-          <Text style={styles.title}>Welcome!</Text>
-          <Text style={styles.sub}>
-            Your family sent you a text with a short code. Type it here — that's the
-            only typing you'll ever do in this app.
-          </Text>
-          <View style={{ height: 28 }} />
-          <TextInput
-            value={code}
-            onChangeText={(v) => {
-              setCode(v.toUpperCase());
-              setError(null);
-            }}
-            placeholder="ABCD-1234"
-            placeholderTextColor={T.line}
-            autoCapitalize="characters"
-            autoCorrect={false}
-            maxLength={9}
-            style={styles.codeInput}
-          />
-          {error && <Text style={styles.error}>{error}</Text>}
-          <View style={{ height: 18 }} />
-          {busy ? (
-            <ActivityIndicator size="large" color={T.ink} style={{ marginVertical: 18 }} />
-          ) : (
-            <BigButton
-              label={canGo ? "Show me my sun ☀" : "Type the whole code first"}
-              tone={canGo ? "primary" : "secondary"}
-              onPress={go}
-            />
-          )}
-          <Text style={styles.note}>
-            No code? Ask your family to open OK Today and look under Settings → Invite.
-          </Text>
-        </View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+    <LinearGradient colors={[T.skyMist, T.skyDeep]} style={{ flex: 1 }}>
+      <SafeAreaView style={{ flex: 1 }}>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <View style={styles.topRow}>
+            <Tappable
+              onPress={() => router.back()}
+              accessibilityLabel="Go back"
+              style={styles.back}
+            >
+              <Ionicons name="chevron-back" size={22} color={T.ink} />
+            </Tappable>
+          </View>
+
+          <ScrollView
+            contentContainerStyle={styles.wrap}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <FadeIn style={{ alignItems: "center" }}>
+              <SunMark size={58} />
+              <Text style={styles.title}>Welcome!</Text>
+              <Text style={styles.sub}>
+                Your family sent you a text with a short code. Type it below — it's
+                the only typing you'll ever do here.
+              </Text>
+            </FadeIn>
+
+            <FadeIn delay={100} style={{ width: "100%", marginTop: S.xxl }}>
+              <TextInput
+                value={code}
+                onChangeText={(v) => {
+                  setCode(v.toUpperCase());
+                  setError(null);
+                }}
+                onFocus={() => setFocused(true)}
+                onBlur={() => setFocused(false)}
+                placeholder="ABCD-1234"
+                placeholderTextColor={T.line}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                maxLength={9}
+                returnKeyType="go"
+                onSubmitEditing={go}
+                style={[styles.codeInput, focused ? styles.codeInputFocused : null, shadow(1)]}
+                accessibilityLabel="Invite code"
+              />
+
+              {error && <View style={{ marginTop: S.lg }}><ErrorNote text={error} /></View>}
+
+              <View style={{ height: S.xl }} />
+              <Button
+                label={canGo ? "Show me my sun" : "Type the whole code first"}
+                tone={canGo ? "sun" : "secondary"}
+                icon={canGo ? "sunny" : undefined}
+                disabled={!canGo}
+                busy={busy}
+                onPress={go}
+              />
+
+              <View style={styles.helpRow}>
+                <Ionicons name="help-circle-outline" size={17} color={T.inkFaint} />
+                <Text style={[ty.small, { flex: 1 }]}>
+                  No code? Ask your family to open OK Today and look under Settings →
+                  Invite.
+                </Text>
+              </View>
+            </FadeIn>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: T.sky },
-  wrap: { flex: 1, padding: 26, paddingTop: 18 },
-  backBtn: { flexDirection: "row", alignItems: "center", marginBottom: 20 },
-  backText: { fontFamily: F.bold, fontSize: 17, color: T.ink },
-  title: { fontFamily: F.serif, fontSize: 36, color: T.ink },
-  sub: {
-    fontFamily: F.body,
-    fontSize: 19,
-    color: T.inkSoft,
-    marginTop: 10,
-    lineHeight: 27,
+  topRow: { paddingHorizontal: S.xl, paddingTop: S.sm },
+  back: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: T.paper,
+    borderWidth: 1,
+    borderColor: T.lineSoft,
+    alignItems: "center",
+    justifyContent: "center",
   },
+  wrap: {
+    flexGrow: 1,
+    justifyContent: "center",
+    paddingHorizontal: S.xxl,
+    paddingVertical: S.xl,
+  },
+  title: { ...ty.parentHero, fontSize: 38, marginTop: S.lg },
+  sub: { ...ty.parentBody, fontSize: 19, textAlign: "center", marginTop: S.md },
   codeInput: {
     borderWidth: 2,
     borderColor: T.line,
-    borderRadius: 16,
-    paddingVertical: 18,
-    paddingHorizontal: 16,
+    borderRadius: R.lg,
+    paddingVertical: S.xl,
+    paddingHorizontal: S.lg,
     fontSize: 32,
     fontFamily: F.extra,
     color: T.ink,
     backgroundColor: T.paper,
     textAlign: "center",
-    letterSpacing: 4,
+    letterSpacing: 5,
   },
-  error: {
-    fontFamily: F.semi,
-    fontSize: 16,
-    color: T.clay,
-    backgroundColor: T.clayPale,
-    borderRadius: 10,
-    padding: 12,
-    marginTop: 14,
-    lineHeight: 22,
-  },
-  note: {
-    fontFamily: F.body,
-    fontSize: 15,
-    color: T.inkSoft,
-    lineHeight: 21,
-    marginTop: 16,
-    textAlign: "center",
+  codeInputFocused: { borderColor: T.sunDeep, backgroundColor: "#FFFDF7" },
+  helpRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: S.sm,
+    marginTop: S.lg,
+    paddingHorizontal: S.xs,
   },
 });

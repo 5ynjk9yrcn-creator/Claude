@@ -1,11 +1,12 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { RoleTabs, SettingsButton } from "../components/chrome";
 import { Sun } from "../components/Sun";
+import { FadeIn, Tappable } from "../components/ui";
 import { calcStreak, checkInTime, todayKey, useStore } from "../lib/store";
-import { F, MOODS, T, type Mood } from "../lib/theme";
+import { F, MOODS, R, S, T, greetingFor, shadow, type as ty, type Mood } from "../lib/theme";
 
 export default function ParentHome() {
   const { data, checkInNow, setMood } = useStore();
@@ -30,40 +31,61 @@ export default function ParentHome() {
 
   return (
     <LinearGradient
-      colors={rec ? [T.warm, T.warmDeep] : [T.sky, T.skyDeep]}
+      colors={rec ? [T.warm, T.warmDeep] : [T.skyMist, T.skyDeep]}
       style={{ flex: 1 }}
     >
-      <SafeAreaView style={{ flex: 1 }}>
+      <SafeAreaView style={{ flex: 1 }} edges={["top", "left", "right"]}>
         <SettingsButton />
-        <ScrollView contentContainerStyle={styles.wrap}>
-          <Text style={styles.date}>{dateLine}</Text>
-          <Text style={styles.greeting}>
-            {stage === "done" ? `That's it for today,\n${name}.` : `Good morning,\n${name}.`}
-          </Text>
+        <ScrollView
+          contentContainerStyle={styles.wrap}
+          showsVerticalScrollIndicator={false}
+        >
+          <FadeIn>
+            <Text style={styles.date}>{dateLine.toUpperCase()}</Text>
+            <Text style={styles.greeting}>
+              {stage === "done" ? "That's it for today," : `${greetingFor()},`}
+              {"\n"}
+              {name}.
+            </Text>
+          </FadeIn>
 
-          {data.loveForMe && (
-            <View style={styles.loveCard}>
-              <Text style={styles.loveText}>
-                ❤ {data.loveForMe.from} saw you were OK
-                {data.loveForMe.day === todayKey() ? "" : " yesterday"} and sent you
-                love.
-              </Text>
-            </View>
+          {data.loveForMe && stage !== "mood" && (
+            <FadeIn delay={120}>
+              <View style={styles.loveCard}>
+                <Text style={styles.loveHeart}>❤️</Text>
+                <Text style={styles.loveText}>
+                  {data.loveForMe.from} saw you were OK
+                  {data.loveForMe.day === todayKey() ? "" : " yesterday"} and sent
+                  you love.
+                </Text>
+              </View>
+            </FadeIn>
           )}
 
-          <Sun tapped={!!rec} onTap={checkInNow} />
+          <FadeIn delay={80} style={styles.sunWrap}>
+            <Sun tapped={!!rec} onTap={checkInNow} />
+          </FadeIn>
 
           {stage === "sun" && (
-            <Text style={styles.hintBelow}>
-              Tap the sun once a day —{"\n"}that's all there is to it.
-            </Text>
+            <FadeIn delay={200}>
+              <Text style={styles.hint}>
+                Tap the sun once a day —{"\n"}that's all there is to it.
+              </Text>
+              {streak > 1 && (
+                <View style={styles.streakPill}>
+                  <Text style={styles.streakText}>☀ {streak} mornings in a row</Text>
+                </View>
+              )}
+            </FadeIn>
           )}
 
           {stage === "mood" && rec && (
-            <View style={styles.afterWrap}>
+            <FadeIn delay={120} style={{ width: "100%" }}>
               <Text style={styles.checkedText}>
-                You're all set — checked in at{" "}
-                <Text style={{ fontFamily: F.extra }}>{checkInTime(rec)}</Text>.
+                Checked in at{" "}
+                <Text style={{ fontFamily: F.extra, color: T.ink }}>
+                  {checkInTime(rec)}
+                </Text>
               </Text>
               <Text style={styles.moodPrompt}>How are you feeling?</Text>
               <View style={styles.moodRow}>
@@ -71,52 +93,71 @@ export default function ParentHome() {
                   const m = MOODS[k];
                   const on = rec.mood === k;
                   return (
-                    <Pressable
+                    <Tappable
                       key={k}
+                      haptic="medium"
+                      accessibilityLabel={m.label}
                       onPress={() => {
                         setMood(k);
                         setChangingMood(false);
                       }}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: on }}
                       style={[
-                        styles.moodBtn,
+                        styles.moodCard,
                         {
                           borderColor: on ? m.color : T.line,
-                          borderWidth: on ? 3 : 2,
                           backgroundColor: on ? m.bg : T.paper,
                         },
+                        shadow(1),
                       ]}
                     >
-                      <Text style={[styles.moodText, { color: on ? m.color : T.ink }]}>
+                      <Text style={styles.moodEmoji}>{m.emoji}</Text>
+                      <Text style={[styles.moodLabel, { color: on ? m.color : T.ink }]}>
                         {m.label}
                       </Text>
-                    </Pressable>
+                    </Tappable>
                   );
                 })}
               </View>
-            </View>
+            </FadeIn>
           )}
 
           {stage === "done" && rec && rec.mood && (
-            <View style={styles.afterWrap}>
-              <View style={styles.doneCard}>
-                <Text style={styles.doneLine}>
-                  Checked in at{" "}
-                  <Text style={{ fontFamily: F.extra }}>{checkInTime(rec)}</Text> ·
-                  Feeling {MOODS[rec.mood].label.toLowerCase()}
-                </Text>
+            <FadeIn delay={120} style={{ width: "100%", alignItems: "center" }}>
+              <View style={[styles.doneCard, shadow(1)]}>
+                <View style={styles.doneRow}>
+                  <Text style={styles.doneLabel}>Checked in</Text>
+                  <Text style={styles.doneValue}>{checkInTime(rec)}</Text>
+                </View>
+                <View style={styles.doneDivider} />
+                <View style={styles.doneRow}>
+                  <Text style={styles.doneLabel}>Feeling</Text>
+                  <Text style={styles.doneValue}>
+                    {MOODS[rec.mood].emoji} {MOODS[rec.mood].label}
+                  </Text>
+                </View>
                 {streak > 1 && (
-                  <Text style={styles.streak}>☀ {streak} mornings in a row</Text>
+                  <>
+                    <View style={styles.doneDivider} />
+                    <View style={styles.doneRow}>
+                      <Text style={styles.doneLabel}>Streak</Text>
+                      <Text style={[styles.doneValue, { color: T.leaf }]}>
+                        ☀ {streak} mornings
+                      </Text>
+                    </View>
+                  </>
                 )}
               </View>
-              <Text style={styles.seeYou}>
-                See you tomorrow{"\n"}morning. ☀
-              </Text>
-              <Pressable onPress={() => setChangingMood(true)} hitSlop={8}>
-                <Text style={styles.changeLink}>Change how I'm feeling</Text>
-              </Pressable>
-            </View>
+
+              <Text style={styles.seeYou}>See you tomorrow{"\n"}morning.</Text>
+
+              <Tappable
+                onPress={() => setChangingMood(true)}
+                style={styles.changeBtn}
+                accessibilityLabel="Change how I'm feeling"
+              >
+                <Text style={styles.changeText}>Change how I'm feeling</Text>
+              </Tappable>
+            </FadeIn>
           )}
         </ScrollView>
         <RoleTabs />
@@ -129,88 +170,120 @@ const styles = StyleSheet.create({
   wrap: {
     flexGrow: 1,
     alignItems: "center",
-    padding: 26,
-    paddingTop: 30,
-    paddingBottom: 30,
+    paddingHorizontal: S.xxl,
+    paddingTop: S.xxl,
+    paddingBottom: S.xxl,
   },
-  date: { fontFamily: F.body, fontSize: 21, color: T.inkSoft, letterSpacing: 0.3 },
+  date: {
+    fontFamily: F.extra,
+    fontSize: 12.5,
+    letterSpacing: 1.6,
+    color: T.inkFaint,
+    textAlign: "center",
+  },
   greeting: {
-    fontFamily: F.serif,
-    fontSize: 40,
-    color: T.ink,
+    ...ty.parentHero,
     textAlign: "center",
-    lineHeight: 46,
-    marginTop: 10,
-    marginBottom: 28,
+    marginTop: S.md,
   },
-  hintBelow: {
-    fontFamily: F.body,
-    fontSize: 22,
-    color: T.inkSoft,
+  sunWrap: { marginTop: S.sm },
+  hint: {
+    ...ty.parentBody,
     textAlign: "center",
-    lineHeight: 30,
-    marginTop: 30,
+    marginTop: S.lg,
   },
-  afterWrap: { marginTop: 26, width: "100%", alignItems: "center" },
+  streakPill: {
+    alignSelf: "center",
+    backgroundColor: T.leafPale,
+    borderWidth: 1,
+    borderColor: "#B9DCC8",
+    borderRadius: R.pill,
+    paddingVertical: 9,
+    paddingHorizontal: S.xl,
+    marginTop: S.xl,
+  },
+  streakText: { fontFamily: F.bold, fontSize: 16, color: T.leaf },
+
   checkedText: {
-    fontFamily: F.body,
-    fontSize: 24,
-    color: T.ink,
+    ...ty.parentBody,
     textAlign: "center",
-    lineHeight: 32,
+    marginTop: S.lg,
   },
   moodPrompt: {
-    fontFamily: F.body,
-    fontSize: 20,
-    color: T.inkSoft,
-    marginTop: 18,
-    marginBottom: 12,
-  },
-  moodRow: { flexDirection: "row", gap: 10, justifyContent: "center" },
-  moodBtn: { paddingVertical: 14, paddingHorizontal: 18, borderRadius: 999 },
-  moodText: { fontFamily: F.bold, fontSize: 20 },
-  doneCard: {
-    backgroundColor: "rgba(255,255,255,0.75)",
-    borderWidth: 1,
-    borderColor: T.line,
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    alignItems: "center",
-  },
-  doneLine: { fontFamily: F.body, fontSize: 19, color: T.ink, textAlign: "center" },
-  streak: { fontFamily: F.bold, fontSize: 19, color: T.leaf, marginTop: 8 },
-  seeYou: {
-    fontFamily: F.serif,
-    fontSize: 30,
+    fontFamily: F.display,
+    fontSize: 26,
+    lineHeight: 33,
     color: T.ink,
     textAlign: "center",
-    lineHeight: 38,
-    marginTop: 22,
+    marginTop: S.xl,
+    marginBottom: S.lg,
   },
-  changeLink: {
-    fontFamily: F.bold,
+  moodRow: { flexDirection: "row", gap: S.md },
+  moodCard: {
+    flex: 1,
+    borderWidth: 2,
+    borderRadius: R.lg,
+    paddingVertical: S.lg,
+    paddingHorizontal: S.sm,
+    alignItems: "center",
+  },
+  moodEmoji: { fontSize: 34 },
+  moodLabel: { fontFamily: F.bold, fontSize: 16, marginTop: 6, textAlign: "center" },
+
+  doneCard: {
+    width: "100%",
+    backgroundColor: "rgba(255,255,255,0.82)",
+    borderRadius: R.xl,
+    borderWidth: 1,
+    borderColor: "#EEE1C6",
+    paddingVertical: S.sm,
+    paddingHorizontal: S.xl,
+    marginTop: S.xl,
+  },
+  doneRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: S.md,
+  },
+  doneLabel: { fontFamily: F.body, fontSize: 17, color: T.inkSoft },
+  doneValue: { fontFamily: F.bold, fontSize: 18, color: T.ink },
+  doneDivider: { height: 1, backgroundColor: "#EEE1C6" },
+
+  seeYou: {
+    fontFamily: F.display,
+    fontSize: 28,
+    lineHeight: 36,
+    color: T.ink,
+    textAlign: "center",
+    marginTop: S.xxl,
+  },
+  changeBtn: { paddingVertical: S.md, paddingHorizontal: S.lg, marginTop: S.sm },
+  changeText: {
+    fontFamily: F.semi,
     fontSize: 15,
-    color: T.inkSoft,
+    color: T.inkFaint,
     textDecorationLine: "underline",
-    marginTop: 20,
   },
+
   loveCard: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: T.clayPale,
-    borderWidth: 1.5,
-    borderColor: "#E5B3A5",
-    borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 18,
-    marginTop: -8,
-    marginBottom: 22,
-    maxWidth: 340,
+    borderWidth: 1,
+    borderColor: T.clayLine,
+    borderRadius: R.lg,
+    paddingVertical: S.md,
+    paddingHorizontal: S.lg,
+    marginTop: S.lg,
+    maxWidth: 360,
   },
+  loveHeart: { fontSize: 22, marginRight: S.md },
   loveText: {
     fontFamily: F.semi,
-    fontSize: 18,
+    fontSize: 16.5,
+    lineHeight: 23,
     color: T.clay,
-    textAlign: "center",
-    lineHeight: 25,
+    flex: 1,
   },
 });
