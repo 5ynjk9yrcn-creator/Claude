@@ -18,10 +18,14 @@ import { F, S, T, type as ty } from "../lib/theme";
    Parents never see this screen — they join with an invite code. */
 export default function Auth() {
   const router = useRouter();
-  const { data, signUp, signIn, refresh } = useStore();
-  const [mode, setMode] = useState<"signup" | "signin">("signup");
-  const [email, setEmail] = useState("");
+  const { data, signUp, signIn, refresh, rememberedEmail, rememberEmail } = useStore();
+  // A remembered email means they've been here before — start on Sign in.
+  const [mode, setMode] = useState<"signup" | "signin">(
+    rememberedEmail ? "signin" : "signup"
+  );
+  const [email, setEmail] = useState(rememberedEmail ?? "");
   const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,6 +44,7 @@ export default function Auth() {
       setError(err);
       return;
     }
+    rememberEmail(remember ? email.trim() : null);
     if (mode === "signin") {
       await refresh();
       router.replace("/");
@@ -95,6 +100,18 @@ export default function Auth() {
               secureTextEntry
               autoComplete={mode === "signup" ? "new-password" : "current-password"}
             />
+
+            <Tappable
+              onPress={() => setRemember(!remember)}
+              style={styles.rememberRow}
+              accessibilityLabel="Remember my email"
+              accessibilityRole="button"
+            >
+              <View style={[styles.checkbox, remember ? styles.checkboxOn : null]}>
+                {remember && <Ionicons name="checkmark" size={15} color={T.paper} />}
+              </View>
+              <Text style={styles.rememberText}>Remember my email on this phone</Text>
+            </Tappable>
 
             {error && <ErrorNote text={error} />}
 
@@ -158,6 +175,25 @@ const styles = StyleSheet.create({
   wrap: { paddingHorizontal: S.xl, paddingBottom: S.xxxl, paddingTop: S.lg },
   title: { ...ty.title, fontSize: 30 },
   sub: { ...ty.bodyLg, color: T.inkSoft, marginTop: S.md },
+  rememberRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: S.md,
+    paddingVertical: S.sm,
+    marginBottom: S.lg,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 7,
+    borderWidth: 2,
+    borderColor: T.line,
+    backgroundColor: T.paper,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkboxOn: { backgroundColor: T.ink, borderColor: T.ink },
+  rememberText: { fontFamily: F.semi, fontSize: 15, color: T.inkSoft },
   switchBtn: { alignItems: "center", paddingVertical: S.md },
   switchText: { fontFamily: F.semi, fontSize: 15, color: T.inkSoft },
   note: { ...ty.small, textAlign: "center", marginTop: S.xl },

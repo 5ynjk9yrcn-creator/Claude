@@ -18,6 +18,9 @@ import type { Mood } from "./theme";
    `pendingDays` and sync as soon as the network is back). */
 
 const KEY = "oktoday-v2";
+/* Kept outside KEY on purpose: signing out and resetting the phone should
+   still remember which email to prefill next time. */
+const EMAIL_KEY = "oktoday-remembered-email";
 
 export type CheckIn = { iso: string; mood: Mood | null };
 export type Contact = { name: string; phone: string; isPrimary: boolean };
@@ -60,8 +63,42 @@ export function dateNDaysAgo(n: number): Date {
   return d;
 }
 
+/* Day and time in the watched person's timezone. The family may be in a
+   different one, and their calendar and times must reflect the parent's day,
+   not the viewer's. Falls back to device-local if the runtime lacks tz data. */
+export function dayKeyTz(tz: string | undefined, d = new Date()): string {
+  if (!tz) return todayKey(d);
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: tz,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(d);
+  } catch {
+    return todayKey(d);
+  }
+}
+
+export function dayKeyTzBack(tz: string | undefined, n: number): string {
+  return dayKeyTz(tz, dateNDaysAgo(n));
+}
+
 export const fmtTime = (d: Date) =>
   d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+
+export function fmtTimeTz(d: Date, tz?: string): string {
+  if (!tz) return fmtTime(d);
+  try {
+    return d.toLocaleTimeString([], {
+      timeZone: tz,
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return fmtTime(d);
+  }
+}
 
 export const fmtDeadline = (deadline: string) => {
   const [h, m] = deadline.split(":").map(Number);
@@ -77,31 +114,46 @@ export function deadlineToday(deadline: string): Date {
   return d;
 }
 
-export function calcStreak(checkins: Record<string, CheckIn>): number {
+export function calcStreak(checkins: Record<string, CheckIn>, tz?: string): number {
   let s = 0;
   // If today isn't checked in yet, the streak isn't broken — start counting yesterday.
-  let n = checkins[todayKey()] ? 0 : 1;
+  let n = checkins[dayKeyTz(tz)] ? 0 : 1;
   for (; ; n++) {
-    if (checkins[todayKey(dateNDaysAgo(n))]) s++;
+    if (checkins[dayKeyTzBack(tz, n)]) s++;
     else break;
   }
   return s;
 }
 
-export function usualTime(checkins: Record<string, CheckIn>): string {
+export function usualTime(checkins: Record<string, CheckIn>, tz?: string): string {
   const recs = Object.values(checkins);
   if (!recs.length) return "—";
+  // Average the wall-clock minute-of-day as seen in the parent's timezone.
   const mins =
     recs.reduce((a, r) => {
-      const d = new Date(r.iso);
-      return a + d.getHours() * 60 + d.getMinutes();
+      const [h, m] = fmtTimeTz24(new Date(r.iso), tz).split(":").map(Number);
+      return a + h * 60 + m;
     }, 0) / recs.length;
   const d = new Date();
   d.setHours(Math.floor(mins / 60), Math.round(mins % 60), 0, 0);
   return fmtTime(d);
 }
 
-export const checkInTime = (rec: CheckIn) => fmtTime(new Date(rec.iso));
+function fmtTimeTz24(d: Date, tz?: string): string {
+  try {
+    return d.toLocaleTimeString("en-GB", {
+      timeZone: tz,
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+  } catch {
+    return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
+  }
+}
+
+export const checkInTime = (rec: CheckIn, tz?: string) =>
+  fmtTimeTz(new Date(rec.iso), tz);
 
 export const formatInviteCode = (code: string) =>
   code.length === 8 ? `${code.slice(0, 4)}-${code.slice(4)}` : code;
@@ -152,6 +204,8 @@ type Store = {
   data: AppData | null; // null while loading from disk
   sessionReady: boolean;
   hasSession: boolean;
+  rememberedEmail: string | null;
+  rememberEmail: (email: string | null) => void;
   update: (patch: Partial<AppData>) => void;
   checkInNow: () => void;
   setMood: (mood: Mood) => void;
@@ -177,6 +231,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<AppData | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [sessionReady, setSessionReady] = useState(false);
+  const [rememberedEmail, setRememberedEmail] = useState<string | null>(null);
   const dataRef = useRef<AppData | null>(null);
   const sessionRef = useRef<Session | null>(null);
   const syncing = useRef(false);
@@ -190,6 +245,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setData(raw ? { ...emptyData(), ...JSON.parse(raw) } : emptyData());
       } catch {
         setData(emptyData());
+      }
+      try {
+        setRememberedEmail(await AsyncStorage.getItem(EMAIL_KEY));
+      } catch {
+        /* nothing remembered */
       }
       const { data: s } = await supabase.auth.getSession();
       setSession(s.session);
@@ -214,6 +274,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     [persist]
   );
+
+  const rememberEmail = useCallback((email: string | null) => {
+    setRememberedEmail(email);
+    if (email) AsyncStorage.setItem(EMAIL_KEY, email).catch(() => {});
+    else AsyncStorage.removeItem(EMAIL_KEY).catch(() => {});
+  }, []);
 
   /* ---- server sync ---- */
 
@@ -342,13 +408,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           : null;
       }
       if (watchCircle) {
+        const watchDay = dayKeyTz(watchCircle.timezone);
         const { data: sent } = await supabase
           .from("loves")
           .select("day")
           .eq("circle_id", watchCircle.id)
-          .eq("day", todayKey())
+          .eq("day", watchDay)
           .limit(1);
-        next.loveSentDay = sent?.[0] ? todayKey() : next.loveSentDay;
+        next.loveSentDay = sent?.[0] ? watchDay : next.loveSentDay;
 
         // What did the escalation system do today?
         next.testDeadlineAt = watchCircle.test_deadline_at ?? null;
@@ -356,7 +423,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           .from("alerts")
           .select("kind, channel, target, status, run_tag, created_at")
           .eq("circle_id", watchCircle.id)
-          .eq("day", todayKey())
+          .eq("day", watchDay)
           .order("created_at");
         next.todaysAlerts = (al ?? []).map((a) => ({
           kind: a.kind,
@@ -527,11 +594,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const claimInvite = useCallback(
     async (code: string): Promise<string | null> => {
       try {
+        // The parent's phone must join as its own anonymous identity — never
+        // as a family account that happens to still be signed in here.
+        const cur0 = sessionRef.current;
+        if (cur0 && !cur0.user.is_anonymous) {
+          await supabase.auth.signOut();
+          sessionRef.current = null;
+        }
         if (!sessionRef.current) {
           const { error } = await supabase.auth.signInAnonymously();
           if (error) return "Couldn't reach the server — check your internet and try again.";
         }
-        const { data: res, error } = await supabase.rpc("claim_invite", { code });
+        const { data: res, error } = await supabase.rpc("claim_invite", {
+          code,
+          tz: deviceTimezone(),
+        });
         if (error) return "Couldn't reach the server — check your internet and try again.";
         if (!res?.ok) return "That code didn't match — double-check the letters and numbers.";
         const cur = dataRef.current!;
@@ -566,11 +643,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             .update({ parent_name: next.parentName, deadline: next.deadline })
             .eq("id", next.watchCircleId);
         }
-        if (
-          next.checkinCircleId &&
-          patch.deadline !== undefined &&
-          next.role === "parent"
-        ) {
+        // "Both" accounts keep their own check-in circle on the same deadline.
+        if (next.checkinCircleId && patch.deadline !== undefined) {
           await supabase
             .from("circles")
             .update({ deadline: next.deadline })
@@ -618,12 +692,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const cur = dataRef.current;
     if (!cur?.watchCircleId) return "No circle to send to yet.";
     const from = cur.contacts.find((c) => c.isPrimary)?.name || "Your family";
+    // Recorded against the parent's day, not the sender's.
+    const day = dayKeyTz(cur.timezone);
     const { error } = await supabase.from("loves").upsert(
-      { circle_id: cur.watchCircleId, day: todayKey(), from_name: from },
+      { circle_id: cur.watchCircleId, day, from_name: from },
       { onConflict: "circle_id,day", ignoreDuplicates: true }
     );
     if (error) return "Couldn't send it — check your internet and try again.";
-    update({ loveSentDay: todayKey() });
+    update({ loveSentDay: day });
     return null;
   }, [update]);
 
@@ -643,6 +719,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         data,
         sessionReady,
         hasSession: !!session,
+        rememberedEmail,
+        rememberEmail,
         update,
         checkInNow,
         setMood,

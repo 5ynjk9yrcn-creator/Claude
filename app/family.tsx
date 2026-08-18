@@ -15,10 +15,10 @@ import {
 import {
   calcStreak,
   checkInTime,
-  dateNDaysAgo,
+  dayKeyTz,
+  dayKeyTzBack,
   deadlineToday,
   fmtTime,
-  todayKey,
   usualTime,
   useStore,
   type AlertRow,
@@ -36,15 +36,18 @@ export default function FamilyDash() {
   const [note, setNote] = useState<string | null>(null);
   if (!data) return null;
 
+  // Everything on this screen is shown in the watched person's timezone,
+  // which may differ from the viewer's.
+  const tz = data.timezone;
   const history = data.watchedCheckins;
-  const realRec = history[todayKey()];
+  const realRec = history[dayKeyTz(tz)];
   const rec = simMissed ? undefined : realRec;
   const dl = deadlineToday(data.deadline);
-  const pastDeadline = simMissed || new Date() > dl;
+  const pastDeadline = simMissed || minutesNowTz(tz) >= minutesOf(data.deadline);
   const status: "in" | "missed" | "waiting" = rec ? "in" : pastDeadline ? "missed" : "waiting";
-  const streak = simMissed ? 0 : calcStreak(history);
+  const streak = simMissed ? 0 : calcStreak(history, tz);
   const name = data.parentName || "Your parent";
-  const loveSent = data.loveSentDay === todayKey();
+  const loveSent = data.loveSentDay === dayKeyTz(tz);
   const testActive = !!data.testDeadlineAt;
 
   const pullRefresh = async () => {
@@ -73,11 +76,11 @@ export default function FamilyDash() {
 
   const days: { k: string; letter: string; rec: CheckIn | undefined; isToday: boolean }[] = [];
   for (let n = 13; n >= 0; n--) {
-    const d = dateNDaysAgo(n);
-    const k = todayKey(d);
+    const k = dayKeyTzBack(tz, n);
     days.push({
       k,
-      letter: d.toLocaleDateString([], { weekday: "narrow" }),
+      // Parse as a plain local date so the weekday letter matches the key.
+      letter: new Date(`${k}T12:00:00`).toLocaleDateString([], { weekday: "narrow" }),
       rec: n === 0 && simMissed ? undefined : history[k],
       isToday: n === 0,
     });
@@ -89,7 +92,7 @@ export default function FamilyDash() {
       accent: T.leaf,
       border: "#B9DCC8",
       icon: "checkmark-circle" as const,
-      title: `Checked in at ${rec ? checkInTime(rec) : ""}`,
+      title: `Checked in at ${rec ? checkInTime(rec, tz) : ""}`,
       sub:
         rec?.mood && MOODS[rec.mood]
           ? `Feeling ${MOODS[rec.mood].label.toLowerCase()} ${MOODS[rec.mood].emoji}`
@@ -101,7 +104,7 @@ export default function FamilyDash() {
       border: "#EBCF8C",
       icon: "time-outline" as const,
       title: "No check-in yet",
-      sub: `Nothing to worry about until ${fmtTime(dl)}. Usual time is ${usualTime(history)}.`,
+      sub: `Nothing to worry about until ${fmtTime(dl)}. Usual time is ${usualTime(history, tz)}.`,
     },
     missed: {
       tint: T.clayPale,
@@ -185,7 +188,7 @@ export default function FamilyDash() {
         <FadeIn delay={110}>
           <View style={styles.statRow}>
             <Stat icon="flame" label="Streak" value={`${streak}`} unit={streak === 1 ? "day" : "days"} tint={T.sunDeep} />
-            <Stat icon="alarm-outline" label="Usual" value={usualTime(history)} tint={T.ink} />
+            <Stat icon="alarm-outline" label="Usual" value={usualTime(history, tz)} tint={T.ink} />
             <Stat icon="flag-outline" label="Deadline" value={fmtTime(dl)} tint={T.ink} />
           </View>
         </FadeIn>
@@ -342,6 +345,27 @@ function LegendDot({ color, label }: { color: string; label: string }) {
       <Text style={styles.legendText}>{label}</Text>
     </View>
   );
+}
+
+const minutesOf = (hhmm: string) => {
+  const [h, m] = hhmm.split(":").map(Number);
+  return h * 60 + m;
+};
+
+/* Current minute-of-day where the watched person lives. */
+function minutesNowTz(tz?: string): number {
+  try {
+    const s = new Date().toLocaleTimeString("en-GB", {
+      timeZone: tz,
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+    return minutesOf(s);
+  } catch {
+    const d = new Date();
+    return d.getHours() * 60 + d.getMinutes();
+  }
 }
 
 function alertLabel(a: AlertRow, parentName: string): string {

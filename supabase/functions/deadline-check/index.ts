@@ -36,7 +36,17 @@ type Circle = {
   parent_user_id: string | null;
   owner_id: string;
   test_deadline_at: string | null;
+  is_self: boolean;
 };
+
+/* Minutes from `now` until `target`, wrapping across midnight so a deadline
+   soon after midnight still gets its hour-before reminder the evening prior. */
+function minutesUntil(nowM: number, targetM: number): number {
+  const d = targetM - nowM;
+  if (d > 720) return d - 1440;
+  if (d < -720) return d + 1440;
+  return d;
+}
 
 function localParts(tz: string, d = new Date()) {
   const fmt = new Intl.DateTimeFormat("en-CA", {
@@ -218,7 +228,9 @@ Deno.serve(async (req) => {
   try {
     const { data: circles, error: cErr } = await admin
       .from("circles")
-      .select("id, parent_name, deadline, timezone, parent_user_id, owner_id, test_deadline_at");
+      .select(
+        "id, parent_name, deadline, timezone, parent_user_id, owner_id, test_deadline_at, is_self"
+      );
     if (cErr) throw new Error(cErr.message);
 
     for (const c of (circles ?? []) as Circle[]) {
@@ -259,7 +271,7 @@ Deno.serve(async (req) => {
       };
 
       /* ---- test mode: pretend the morning was missed, on fast timings ---- */
-      if (c.test_deadline_at) {
+      if (c.test_deadline_at && !c.is_self) {
         const t0 = new Date(c.test_deadline_at).getTime();
         const now = Date.now();
         const tag = `test:${c.test_deadline_at}`;
@@ -310,6 +322,7 @@ Deno.serve(async (req) => {
 
       /* ---- the real thing ---- */
       if (checkin) {
+        if (c.is_self) continue; // nobody to notify about your own check-in
         // "Not great" heads-up
         if (checkin.mood === "notgreat") {
           await send("notgreat", "push", "owner", "", () =>
@@ -352,7 +365,8 @@ Deno.serve(async (req) => {
       }
 
       // No check-in yet today:
-      if (nowM >= dlM - REMINDER_MIN && nowM < dlM) {
+      const untilDeadline = minutesUntil(nowM, dlM);
+      if (untilDeadline > 0 && untilDeadline <= REMINDER_MIN) {
         await send("reminder", "push", "parent", "", () =>
           sendPush(
             c.parent_user_id,
@@ -361,6 +375,10 @@ Deno.serve(async (req) => {
           )
         );
       }
+
+      // A self check-in circle has no one to escalate to — reminders only.
+      if (c.is_self) continue;
+
       if (nowM >= dlM) {
         await send("primary", "push", "owner", "", () =>
           sendPush(
