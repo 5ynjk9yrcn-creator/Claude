@@ -1,0 +1,38 @@
+Sunset Radar — Proprietary Licence
+
+Copyright (c) 2026 <YOUR NAME OR COMPANY>. All rights reserved.
+
+This software and its accompanying documentation (the "Software") are the confidential and
+proprietary property of the copyright holder.
+
+1. Grant. No licence, right or interest in the Software is granted except by a separate written
+   agreement signed by the copyright holder. A customer who receives the Software under such an
+   agreement is granted a non-exclusive, non-transferable right to install and use it for that
+   customer's internal business purposes, for the term and on the terms of that agreement.
+
+2. Restrictions. Except as expressly permitted by such an agreement or by applicable law, no
+   person may copy, modify, distribute, sublicense, sell, rent, lease, publish, or create
+   derivative works of the Software, nor remove or alter any proprietary notice in it.
+
+3. Third-party material. The Software has no third-party runtime dependencies. Vendor names,
+   trademarks and changelog URLs referenced in the vendor catalogue are the property of their
+   respective owners and are used only for identification and interoperability.
+
+4. No warranty. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+   PARTICULAR PURPOSE AND NONINFRINGEMENT. The Software monitors third-party publications on a
+   best-effort basis and is not a guarantee that any particular change will be detected or
+   reported.
+
+5. Limitation of liability. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM,
+   DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR ITS USE.
+
+To licence this Software, contact the copyright holder.
+
+---
+Note for the owner: replace <YOUR NAME OR COMPANY> above with your legal name or entity. If you
+would rather open-source it (for example to drive adoption and sell a hosted version), replace
+this file with an MIT, Apache-2.0 or AGPL-3.0 licence — AGPL is the usual choice for an
+open-core SaaS, since it lets you publish the code while preventing a competitor from running it
+as a hosted service without sharing changes.

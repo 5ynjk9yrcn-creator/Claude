@@ -1,0 +1,86 @@
+[
+  {
+    "vendor": "stripe",
+    "title": "The /v1/charges endpoint is deprecated and will be removed",
+    "url": "https://docs.stripe.com/changelog#charges-removal",
+    "published_at": "2026-08-12",
+    "body": "The legacy /v1/charges API is deprecated. Requests to /v1/charges will return HTTP 410 after March 1, 2027. You must migrate to /v1/payment_intents, which supports the same flows plus SCA. Accounts pinned to API version 2024-06-20 or earlier are affected. See the migration guide for a field-by-field mapping. This is a breaking change; no automatic translation is applied."
+  },
+  {
+    "vendor": "stripe",
+    "title": "Improved search filters in the Dashboard",
+    "url": "https://docs.stripe.com/changelog#dashboard-filters",
+    "published_at": "2026-08-20",
+    "body": "You can now filter payments by metadata key in the Dashboard. No action is required and the API is unchanged."
+  },
+  {
+    "vendor": "openai",
+    "title": "Shutting down text-embedding-ada-002",
+    "url": "https://platform.openai.com/docs/deprecations#ada-002",
+    "published_at": "2026-07-30",
+    "body": "text-embedding-ada-002 is deprecated. The model will be shut down on January 15, 2027 and requests will fail after that date. Migrate to text-embedding-3-small, which is cheaper and higher quality. Embeddings are not compatible across models, so vectors must be regenerated before you switch."
+  },
+  {
+    "vendor": "openai",
+    "title": "gpt-4-turbo retirement schedule published",
+    "url": "https://platform.openai.com/docs/deprecations#gpt-4-turbo",
+    "published_at": "2026-08-02",
+    "body": "gpt-4-turbo will be retired on 2027-06-01. Requests specifying that model after the retirement date will return a 404 model_not_found error. We recommend moving to the current flagship model. No action required before then, but pinned model strings must be updated."
+  },
+  {
+    "vendor": "nodejs",
+    "title": "Node.js 18 is past end of life on 2025-04-30",
+    "url": "https://endoflife.date/nodejs",
+    "published_at": "2025-04-30",
+    "body": "Node.js release cycle 18. End of life: 2025-04-30. This version no longer receives security updates. Upgrade is required. Container images and CI runners still pinned to node 18 will not receive patches for future CVEs."
+  },
+  {
+    "vendor": "github",
+    "title": "Actions runners drop Node 16; update actions/checkout@v3",
+    "url": "https://github.blog/changelog/actions-node16-removal",
+    "published_at": "2026-06-18",
+    "body": "Workflows using actions that run on the Node 16 runtime will stop working on 2026-12-01. actions/checkout@v3 and actions/setup-node@v3 are affected and are deprecated; upgrade to @v4 or later. After the date, affected steps will fail with an unsupported runtime error. Action required by all repositories that pin v3."
+  },
+  {
+    "vendor": "slack",
+    "title": "Stricter rate limits for chat.postMessage on non-Marketplace apps",
+    "url": "https://api.slack.com/changelog#rate-limits-2026",
+    "published_at": "2026-08-05",
+    "body": "Beginning on November 3, 2026, chat.postMessage will be limited to one message per channel per second for apps not listed in the Slack Marketplace. Bursts will receive HTTP 429 with a Retry-After header. Applications that fan out notifications must add queuing before this date."
+  },
+  {
+    "vendor": "twilio",
+    "title": "Programmable Messaging price update for US long code",
+    "url": "https://www.twilio.com/en-us/changelog#pricing-2026",
+    "published_at": "2026-08-22",
+    "body": "Effective on January 5, 2027, per-message pricing for US long code SMS increases by $0.0015 per segment. Carrier pass-through fees are unchanged. Existing volume commitments are honoured through their term."
+  },
+  {
+    "vendor": "supabase",
+    "title": "supabase-js v3 released with breaking changes",
+    "url": "https://github.com/supabase/supabase-js/releases/tag/v3.0.0",
+    "published_at": "2026-07-11",
+    "body": "BREAKING: supabase-js v3 removes the deprecated .from().select() overload that accepted a count option as the second argument, and drops support for Node 18. createClient now requires an explicit auth configuration object. See the migration guide before upgrading."
+  },
+  {
+    "vendor": "postgresql",
+    "title": "PostgreSQL 14 reaches end of life on 2026-11-12",
+    "url": "https://endoflife.date/postgresql",
+    "published_at": "2026-05-01",
+    "body": "PostgreSQL release cycle 14. End of life: 2026-11-12. Plan the upgrade before this date; after it there are no security fixes. Managed providers will begin forced upgrades in the weeks following."
+  },
+  {
+    "vendor": "docker",
+    "title": "Alpine 3.18 base images move to unsupported",
+    "url": "https://docs.docker.com/engine/release-notes/#alpine-318",
+    "published_at": "2026-08-14",
+    "body": "Images based on Alpine 3.18 stop receiving security updates after 2026-11-01. Rebuild against a supported base tag. Images that pin node:18-alpine inherit this and should be rebuilt on a maintained tag."
+  },
+  {
+    "vendor": "slack",
+    "title": "New app icon guidelines",
+    "url": "https://api.slack.com/changelog#icons",
+    "published_at": "2026-08-18",
+    "body": "We refreshed the guidance for app icons in the Marketplace listing. Nothing changes for you and no action is required."
+  }
+]

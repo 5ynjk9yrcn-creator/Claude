@@ -1,0 +1,21 @@
+{
+  "name": "sunset-radar",
+  "version": "1.0.0",
+  "description": "Breaking-change radar for the third-party APIs your code actually calls.",
+  "type": "module",
+  "bin": { "sunsetradar": "./bin/sunsetradar.js" },
+  "main": "src/index.js",
+  "engines": { "node": ">=22.5.0" },
+  "scripts": {
+    "start": "node bin/sunsetradar.js serve",
+    "dev": "node --watch bin/sunsetradar.js serve",
+    "migrate": "node bin/sunsetradar.js migrate",
+    "demo": "node bin/sunsetradar.js demo",
+    "scan": "node bin/sunsetradar.js scan",
+    "poll": "node bin/sunsetradar.js poll",
+    "test": "node --test test/*.test.js"
+  },
+  "keywords": ["deprecation", "breaking-change", "api", "changelog", "monitoring", "devops"],
+  "license": "SEE LICENSE IN LICENSE",
+  "private": false
+}

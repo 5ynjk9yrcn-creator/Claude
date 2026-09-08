@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <title>Example Changelog</title>
+  <item>
+    <title><![CDATA[Deprecating the /v1/charges endpoint]]></title>
+    <link>https://example.com/changelog/charges-deprecation</link>
+    <guid isPermaLink="false">chg-001</guid>
+    <pubDate>Mon, 03 Aug 2026 12:00:00 GMT</pubDate>
+    <description><![CDATA[<p>The <code>/v1/charges</code> endpoint is deprecated and will be <strong>removed on March 1, 2027</strong>. Migrate to <code>/v1/payment_intents</code>.</p>]]></description>
+  </item>
+  <item>
+    <title>New dashboard filters</title>
+    <link>https://example.com/changelog/filters</link>
+    <guid>chg-002</guid>
+    <pubDate>Tue, 04 Aug 2026 09:30:00 GMT</pubDate>
+    <description>You can now filter by tag. No action needed.</description>
+  </item>
+</channel></rss>

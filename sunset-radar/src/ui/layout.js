@@ -1,0 +1,175 @@
+// Server-rendered HTML. No build step, no client framework — the whole UI is
+// a few hundred lines of markup and one stylesheet.
+import { config } from '../config.js';
+
+export const esc = (s) => String(s ?? '')
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+export const CSS = `
+:root{
+  --bg:#fbfaf9; --surface:#ffffff; --surface-2:#f6f5f3; --border:#e6e3df; --border-strong:#d6d2cc;
+  --text:#1c1a17; --muted:#6b6660; --faint:#948e86;
+  --accent:#c2410c; --accent-soft:#fff1e8; --accent-text:#9a3412;
+  --critical:#b42318; --critical-bg:#fef3f2; --high:#b54708; --high-bg:#fffaeb;
+  --medium:#a15c07; --medium-bg:#fefbe8; --low:#175cd3; --low-bg:#eff8ff; --info:#5d6b7a; --info-bg:#f2f4f7;
+  --ok:#067647; --ok-bg:#ecfdf3;
+  --radius:10px; --shadow:0 1px 2px rgba(28,26,23,.05), 0 1px 3px rgba(28,26,23,.04);
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#131211; --surface:#1b1a18; --surface-2:#222120; --border:#2e2c29; --border-strong:#3d3a36;
+    --text:#f0ede9; --muted:#a29c94; --faint:#7a746c;
+    --accent:#fb923c; --accent-soft:#2a1a10; --accent-text:#fdba74;
+    --critical:#f87171; --critical-bg:#2a1414; --high:#fbbf24; --high-bg:#2a2110;
+    --medium:#facc15; --medium-bg:#282210; --low:#60a5fa; --low-bg:#111d2e; --info:#94a3b8; --info-bg:#1e1e1e;
+    --ok:#4ade80; --ok-bg:#0f2418;
+    --shadow:0 1px 2px rgba(0,0,0,.3);
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 var(--sans);-webkit-font-smoothing:antialiased}
+a{color:var(--accent-text);text-decoration:none}
+a:hover{text-decoration:underline}
+code,pre,.mono{font-family:var(--mono);font-size:.88em}
+.wrap{max-width:1120px;margin:0 auto;padding:0 22px}
+.topbar{border-bottom:1px solid var(--border);background:var(--surface);position:sticky;top:0;z-index:20}
+.topbar .wrap{display:flex;align-items:center;gap:22px;height:58px}
+.brand{display:flex;align-items:center;gap:9px;font-weight:650;letter-spacing:-.01em;color:var(--text)}
+.brand:hover{text-decoration:none}
+.brand .dot{width:11px;height:11px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px var(--accent-soft)}
+.nav{display:flex;gap:2px;margin-left:auto;align-items:center;flex-wrap:wrap}
+.nav a{padding:7px 11px;border-radius:7px;color:var(--muted);font-size:14px;font-weight:500}
+.nav a:hover{background:var(--surface-2);color:var(--text);text-decoration:none}
+.nav a.active{color:var(--text);background:var(--surface-2)}
+main{padding:30px 0 70px}
+h1{font-size:25px;font-weight:640;letter-spacing:-.02em;margin:0 0 6px}
+h2{font-size:17px;font-weight:620;letter-spacing:-.01em;margin:0 0 12px}
+h3{font-size:14px;font-weight:620;margin:0 0 8px}
+.sub{color:var(--muted);font-size:14px;margin:0 0 22px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow)}
+.card+.card{margin-top:16px}
+.card .hd{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
+.card .hd h2{margin:0}
+.card .bd{padding:18px}
+.card .bd.tight{padding:0}
+.grid{display:grid;gap:16px}
+.grid.c2{grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+.grid.c4{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:15px 17px}
+.stat .n{font-size:27px;font-weight:640;letter-spacing:-.03em;line-height:1.15}
+.stat .l{color:var(--muted);font-size:12.5px;font-weight:500;text-transform:uppercase;letter-spacing:.06em;margin-top:3px}
+.stat.crit .n{color:var(--critical)} .stat.high .n{color:var(--high)} .stat.ok .n{color:var(--ok)}
+.pill{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:99px;font-size:11.5px;font-weight:640;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
+.pill.critical{background:var(--critical-bg);color:var(--critical)}
+.pill.high{background:var(--high-bg);color:var(--high)}
+.pill.medium{background:var(--medium-bg);color:var(--medium)}
+.pill.low{background:var(--low-bg);color:var(--low)}
+.pill.info{background:var(--info-bg);color:var(--info)}
+.pill.ok{background:var(--ok-bg);color:var(--ok)}
+.pill.plain{background:var(--surface-2);color:var(--muted);text-transform:none;letter-spacing:0;font-weight:550}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);font-weight:640;padding:10px 18px;border-bottom:1px solid var(--border);background:var(--surface-2)}
+td{padding:12px 18px;border-bottom:1px solid var(--border);vertical-align:top}
+tr:last-child td{border-bottom:none}
+tr.row:hover td{background:var(--surface-2)}
+.t-title{font-weight:560;color:var(--text);display:block;margin-bottom:2px}
+.t-meta{color:var(--muted);font-size:12.5px}
+.btn{display:inline-flex;align-items:center;gap:7px;padding:8px 14px;border-radius:8px;border:1px solid var(--border-strong);background:var(--surface);color:var(--text);font:inherit;font-size:14px;font-weight:550;cursor:pointer}
+.btn:hover{background:var(--surface-2);text-decoration:none}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn.sm{padding:5px 10px;font-size:13px}
+.btn.danger{color:var(--critical)}
+input,select,textarea{font:inherit;font-size:14px;padding:9px 11px;border:1px solid var(--border-strong);border-radius:8px;background:var(--surface);color:var(--text);width:100%}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:var(--accent)}
+label{display:block;font-size:13px;font-weight:560;margin-bottom:5px;color:var(--muted)}
+.field{margin-bottom:14px}
+.row-form{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.row-form .field{flex:1;min-width:150px;margin-bottom:0}
+.empty{padding:44px 20px;text-align:center;color:var(--muted)}
+.empty h3{color:var(--text);font-size:15px;margin-bottom:6px}
+.flash{padding:11px 15px;border-radius:8px;margin-bottom:18px;font-size:14px;border:1px solid}
+.flash.ok{background:var(--ok-bg);border-color:var(--ok);color:var(--ok)}
+.flash.err{background:var(--critical-bg);border-color:var(--critical);color:var(--critical)}
+.filelist{font-family:var(--mono);font-size:12.5px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:11px 13px;overflow-x:auto}
+.filelist div{padding:2px 0;white-space:nowrap}
+.filelist .ln{color:var(--accent-text)}
+.snippet{font-family:var(--mono);font-size:12px;color:var(--muted);background:var(--surface-2);padding:8px 11px;border-radius:6px;overflow-x:auto;white-space:pre;margin-top:5px;border:1px solid var(--border)}
+.deadline{font-weight:600}
+.deadline.soon{color:var(--critical)}
+.deadline.mid{color:var(--high)}
+.split{display:grid;grid-template-columns:1fr 320px;gap:16px}
+@media(max-width:900px){.split{grid-template-columns:1fr}}
+.kv{display:grid;grid-template-columns:118px 1fr;gap:8px 14px;font-size:13.5px}
+.kv dt{color:var(--muted)} .kv dd{margin:0;word-break:break-word}
+.muted{color:var(--muted)} .faint{color:var(--faint)} .small{font-size:13px}
+.mt{margin-top:16px} .mb{margin-bottom:16px}
+.hr{height:1px;background:var(--border);margin:18px 0}
+.badge-count{display:inline-block;min-width:19px;padding:0 6px;border-radius:99px;background:var(--critical);color:#fff;font-size:11px;font-weight:700;text-align:center;line-height:19px}
+.hero{padding:56px 0 30px;text-align:center}
+.hero h1{font-size:40px;line-height:1.12;letter-spacing:-.03em;max-width:730px;margin:0 auto 16px}
+.hero p{font-size:17.5px;color:var(--muted);max-width:600px;margin:0 auto 26px;line-height:1.6}
+.hero .cta{display:flex;gap:11px;justify-content:center;flex-wrap:wrap}
+.feature{padding:20px}
+.feature h3{font-size:15px;margin-bottom:7px}
+.feature p{margin:0;color:var(--muted);font-size:14px;line-height:1.6}
+.price{text-align:center;padding:26px 20px}
+.price .amt{font-size:33px;font-weight:660;letter-spacing:-.03em}
+.price ul{list-style:none;padding:0;margin:16px 0 0;text-align:left;font-size:13.5px;color:var(--muted)}
+.price li{padding:5px 0 5px 21px;position:relative}
+.price li:before{content:"→";position:absolute;left:0;color:var(--accent)}
+footer{border-top:1px solid var(--border);padding:26px 0;color:var(--faint);font-size:13px}
+`;
+
+export function page({ title, account = null, active = '', body, flash = null, wide = false }) {
+  const nav = account
+    ? `<nav class="nav">
+        <a href="/dashboard" class="${active === 'dashboard' ? 'active' : ''}">Radar</a>
+        <a href="/deadlines" class="${active === 'deadlines' ? 'active' : ''}">Deadlines</a>
+        <a href="/inventory" class="${active === 'inventory' ? 'active' : ''}">Inventory</a>
+        <a href="/sources" class="${active === 'sources' ? 'active' : ''}">Sources</a>
+        <a href="/settings" class="${active === 'settings' ? 'active' : ''}">Settings</a>
+        <form method="post" action="/logout" style="display:inline;margin-left:6px"><button class="btn sm" type="submit">Sign out</button></form>
+      </nav>`
+    : `<nav class="nav"><a href="/#pricing">Pricing</a><a href="/docs">Docs</a><a href="/login">Sign in</a><a class="btn sm primary" href="/signup">Start free</a></nav>`;
+
+  return `<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${esc(title)} · Sunset Radar</title>
+<meta name="description" content="Sunset Radar watches the third-party APIs your code actually calls and warns you before they break.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%23c2410c'/%3E%3Cpath d='M4 20h24' stroke='%23fff' stroke-width='3'/%3E%3C/svg%3E">
+<style>${CSS}</style></head>
+<body>
+<header class="topbar"><div class="wrap">
+  <a class="brand" href="${account ? '/dashboard' : '/'}"><span class="dot"></span> Sunset Radar</a>
+  ${nav}
+</div></header>
+<main><div class="wrap" ${wide ? 'style="max-width:1360px"' : ''}>
+  ${flash ? `<div class="flash ${flash.kind === 'err' ? 'err' : 'ok'}">${esc(flash.message)}</div>` : ''}
+  ${body}
+</div></main>
+<footer><div class="wrap">Sunset Radar${config.singleTenant ? ' · self-hosted' : ''} · <a href="/docs">Docs</a> · <a href="/healthz">Status</a></div></footer>
+</body></html>`;
+}
+
+export const severityPill = (s) => `<span class="pill ${esc(s)}">${esc(s)}</span>`;
+
+export function deadlineCell(iso, now = Date.now()) {
+  if (!iso) return '<span class="faint">—</span>';
+  const days = Math.round((new Date(iso).getTime() - now) / 86400000);
+  const cls = days < 0 ? 'soon' : days <= 30 ? 'soon' : days <= 90 ? 'mid' : '';
+  const label = days < 0 ? `${Math.abs(days)}d ago` : days === 0 ? 'today' : `${days}d`;
+  return `<span class="deadline ${cls}" title="${esc(iso.slice(0, 10))}">${esc(iso.slice(0, 10))} <span class="small">(${label})</span></span>`;
+}
+
+export const timeAgo = (iso) => {
+  if (!iso) return 'never';
+  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 90) return 'just now';
+  if (s < 5400) return `${Math.round(s / 60)}m ago`;
+  if (s < 172800) return `${Math.round(s / 3600)}h ago`;
+  return `${Math.round(s / 86400)}d ago`;
+};

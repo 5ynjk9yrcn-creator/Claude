@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Releases</title>
+  <entry>
+    <id>tag:github.com,2008:Repository/1/v20.0.0</id>
+    <title>v20.0.0 &#8212; breaking changes</title>
+    <link rel="alternate" type="text/html" href="https://github.com/acme/sdk/releases/tag/v20.0.0"/>
+    <updated>2026-07-15T10:00:00Z</updated>
+    <content type="html">&lt;p&gt;BREAKING: drops Node 18 support. The &lt;code&gt;createCharge&lt;/code&gt; helper was removed.&lt;/p&gt;</content>
+  </entry>
+</feed>

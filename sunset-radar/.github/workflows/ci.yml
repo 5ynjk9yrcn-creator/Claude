@@ -1,0 +1,27 @@
+name: CI
+on:
+  push:
+    paths: ['sunset-radar/**']
+  pull_request:
+    paths: ['sunset-radar/**']
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sunset-radar
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test
+        run: npm test
+      - name: Smoke test the CLI end to end
+        run: |
+          export DATABASE_PATH=/tmp/ci.db
+          node bin/sunsetradar.js migrate
+          node bin/sunsetradar.js demo
+          node bin/sunsetradar.js findings --min-severity high
+          node bin/sunsetradar.js status
