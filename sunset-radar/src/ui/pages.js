@@ -326,7 +326,7 @@ export function findingPage({ account, finding, inventory, flash }) {
         <div class="card"><div class="bd">
           <h3>How this project uses ${esc(finding.vendor_name)}</h3>
           ${inventory.length
-            ? `<div class="filelist" style="max-height:280px;overflow:auto">${inventory.slice(0, 40).map((i) => `<div>${esc(i.kind)}: ${esc(i.value)}<span class="ln"> — ${esc(i.file || '')}${i.line ? ':' + i.line : ''}</span></div>`).join('')}</div>`
+            ? `<div class="filelist wrap" style="max-height:300px;overflow:auto">${inventory.slice(0, 40).map((i) => `<div>${esc(i.kind)}: ${esc(i.value)}<span class="ln"> — ${esc(i.file || '')}${i.line ? ':' + i.line : ''}</span></div>`).join('')}</div>`
             : '<p class="small muted" style="margin:0">No inventory rows recorded.</p>'}
         </div></div>
       </div>
@@ -341,7 +341,7 @@ export function deadlinesPage({ account, deadlines }) {
       <td style="width:170px">${deadlineCell(f.deadline_at)}</td>
       <td style="width:88px">${severityPill(f.severity)}</td>
       <td><a class="t-title" href="/findings/${esc(f.id)}">${esc(f.title)}</a><span class="t-meta">${esc(f.vendor_name)} · ${esc(f.project_name)}</span></td>
-      <td style="width:110px">${f.matched_files ? `<strong>${f.matched_files}</strong> <span class="small muted">files</span>` : '<span class="faint small">—</span>'}</td>
+      <td style="width:110px">${f.matched_files ? `<strong>${f.matched_files}</strong> <span class="small muted">file${f.matched_files === 1 ? '' : 's'}</span>` : '<span class="faint small">—</span>'}</td>
     </tr>`;
   }).join('');
   return page({
@@ -357,7 +357,7 @@ export function inventoryPage({ account, projects, inventories }) {
   const blocks = projects.map((p) => {
     const rows = (inventories[p.id] || []).map((v) => `
       <tr class="row"><td><span class="t-title">${esc(v.name)}</span><span class="t-meta">${esc(v.category || '')}</span></td>
-      <td style="width:110px">${v.evidence} signals</td><td style="width:100px">${v.files} files</td>
+      <td style="width:110px">${v.evidence} signal${v.evidence === 1 ? '' : 's'}</td><td style="width:100px">${v.files} file${v.files === 1 ? '' : 's'}</td>
       <td style="width:120px">${v.watched ? '<span class="pill ok">watching</span>' : '<span class="pill plain">muted</span>'}</td></tr>`).join('');
     return `<div class="card"><div class="hd"><h2>${esc(p.name)}</h2><span class="pill plain">${(inventories[p.id] || []).length} vendors</span>
       <a class="btn sm" style="margin-left:auto" href="/projects/${esc(p.id)}">Open</a></div>
