@@ -98,6 +98,47 @@ Three rules exist purely to keep alerts trustworthy:
 
 ---
 
+## The free scan
+
+`/scan` takes a public repository URL, clones it read-only, scans it, deletes the clone, and
+publishes a shareable report at `/r/<token>` — no account, no access to anything private. It is
+the top of the funnel and it needs no trust to try.
+
+It also warms the shared source pool: the first person to scan a repo using a vendor nobody
+watches pays for that fetch, and everyone after them reads it from the database.
+
+```bash
+node bin/sunsetradar.js scan:public vercel/ai-chatbot   # same thing from the terminal
+```
+
+Only `github.com`, `gitlab.com`, `bitbucket.org`, `codeberg.org` and `git.sr.ht` are accepted;
+credentials in the URL, SSH remotes and other hosts are refused. Clones are capped at 400 MB and
+two at a time, anonymous scans are rate limited per address, an identical repo scanned twice in
+six hours reuses the report, and reports expire after thirty days.
+
+## The deprecation report
+
+Point the bulk scanner at a list of public repositories and it produces the one piece of content
+nobody else can write:
+
+```bash
+node bin/sunsetradar.js bulk --repos data/repos.example.txt --out ./deprecation-report
+```
+
+Four files come out:
+
+| File | What it is |
+|---|---|
+| `report.md` | The publishable post — headline claims, which vendors give the least notice, the pins that recur, the repos already past a deadline, and a stated method |
+| `aggregate.json` | The same numbers as data |
+| `reports.json` | The full per-repo reports |
+| `leads.csv` | The outreach list: every repo, its integration count, and how many deadlines it has already missed |
+
+The last one matters as much as the first. A cold email that names a real, expired deadline in
+the recipient's own repository is the only cold email anyone answers.
+
+---
+
 ## Configuration
 
 Everything is environment driven; see `.env.example` for the full list.
@@ -136,6 +177,8 @@ findings [--min-severity high]   List open findings
 sources:list / sources:check     List feeds / verify every feed URL is alive
 status                           One-screen health summary
 demo [--reset]                   Seed the demo account
+scan:public <repo url>           Free-scan a public repo and print the report
+bulk --repos FILE [--out DIR]    Scan many public repos; writes the post, the data and a lead list
 site:build [--out DIR] [--app-url URL]   Export the marketing page as static HTML
 ```
 
@@ -161,6 +204,9 @@ curl -H "Authorization: Bearer sr_…" https://radar.example.com/api/v1/findings
 | `GET` | `/api/v1/vendors` | Catalog and per-source health |
 | `GET`/`POST`/`DELETE` | `/api/v1/channels` | Alert routing |
 | `GET` | `/healthz` | Unauthenticated liveness and state |
+
+Public, unauthenticated: `GET /scan` (the form), `POST /scan` (start one), `GET /r/:token` (the
+report).
 
 ### CI gate
 
@@ -247,7 +293,8 @@ Worth knowing before you rely on it:
 ## Tests
 
 ```bash
-npm test      # 68 tests: scanner, parsers, risk, impact, pipeline, notifications, HTTP, auth
+npm test      # 80 tests: scanner, parsers, risk, impact, pipeline, notifications, HTTP, auth,
+              # public scans, bulk aggregation
 ```
 
 The suite runs entirely offline against fixtures — no network, no mocking library. `HTTP_OFFLINE=true`
@@ -263,7 +310,7 @@ src/catalog/           the vendor catalogue — detection signals + feed URLs (p
 src/scan/              repository scanner
 src/parse/             RSS/Atom, JSON, HTML changelog and end-of-life parsers
 src/analyze/           risk scoring, deadline extraction, impact mapping, optional LLM
-src/pipeline/          poll and scan orchestration
+src/pipeline/          poll and scan orchestration, public scans, bulk reporting
 src/notify/            formatting and delivery (Slack, webhook, email, digests)
 src/store/             data access, one module per aggregate
 src/http/, src/routes/, src/ui/   server, routes, server-rendered pages

@@ -224,5 +224,26 @@ export const MIGRATIONS = [
     -- GitHub release, say). One key per announcement keeps one finding.
     ALTER TABLE items ADD COLUMN dedupe_key TEXT;
     CREATE INDEX idx_items_dedupe ON items(vendor_id, dedupe_key);
+  `],
+  ['004_public_scans', `
+    -- Anonymous scans of public repositories: the free-tier wedge. No
+    -- account, no project, no watchlist — just a shareable report.
+    CREATE TABLE public_scans (
+      id TEXT PRIMARY KEY,
+      token TEXT NOT NULL UNIQUE,
+      repo_url TEXT NOT NULL,
+      repo_name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'queued',
+      error TEXT,
+      report TEXT,
+      ip TEXT,
+      email TEXT,
+      created_at TEXT NOT NULL,
+      finished_at TEXT,
+      expires_at TEXT NOT NULL,
+      views INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX idx_public_scans_created ON public_scans(created_at);
+    CREATE INDEX idx_public_scans_repo ON public_scans(repo_url, created_at);
   `]
 ];

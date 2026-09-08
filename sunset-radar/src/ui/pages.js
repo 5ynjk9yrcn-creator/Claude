@@ -22,7 +22,7 @@ export function landing() {
       <h1>Your code depends on 30 APIs. Every one of them is quietly planning to break it.</h1>
       <p>Sunset Radar reads the changelogs, release notes and end-of-life calendars of the vendors your repo actually calls — then tells you which of <em>your</em> files will break, and when.</p>
       <div class="cta">
-        <a class="btn primary" href="/signup">Scan my repo free</a>
+        <a class="btn primary" href="/scan">Scan a repo free</a>
         <a class="btn" href="/docs">Read the docs</a>
       </div>
       <p class="small faint mt">Self-host it or use the hosted version. No agent in your build. Read-only.</p>
@@ -70,6 +70,14 @@ node bin/sunsetradar.js project:add "My app" --path /srv/my-app
 node bin/sunsetradar.js scan --project prj_...
 node bin/sunsetradar.js serve</pre>
       <p class="muted small">Node 22.5+. No dependencies to install. The database is a single SQLite file.</p>
+    </div></div>
+
+    <div class="card"><div class="bd">
+      <h2>The free scan</h2>
+      <p class="muted small">Anyone can scan a public repository at <a href="/scan">/scan</a> without an account. The clone is read-only and deleted as soon as the scan finishes; the report is a shareable link that expires after thirty days.</p>
+      <pre class="snippet">node bin/sunsetradar.js scan:public vercel/ai-chatbot
+node bin/sunsetradar.js bulk --repos repos.txt --out ./deprecation-report</pre>
+      <p class="muted small">The second command scans a list of public repos and writes a publishable report, the raw data, and a CSV of every repository already past a deadline.</p>
     </div></div>
 
     <div class="card"><div class="bd">
@@ -456,5 +464,134 @@ export function settingsPage({ account, channels, apiKeys, newKey, quota, usage,
           ? `<form method="post" action="/billing/portal" class="mt"><button class="btn" type="submit">Manage billing</button></form>`
           : '<p class="small faint mt" style="margin-bottom:0">Billing is not configured on this install.</p>'}
     </div></div>`
+  });
+}
+
+// --- the free scan ------------------------------------------------------
+
+export function scanForm({ account = null, error = null, value = '' }) {
+  return page({
+    title: 'Scan a repository', account,
+    meta: {
+      title: 'What deprecations is your repo already carrying?',
+      description: 'Paste a public repository URL. Sunset Radar finds the integrations in it and the vendor changes that already apply to them.'
+    },
+    body: `<div style="max-width:640px;margin:38px auto 0">
+      <p class="eyebrow small muted" style="letter-spacing:.08em;text-transform:uppercase;font-weight:600">Free scan · no account</p>
+      <h1>What is your repository already carrying?</h1>
+      <p class="sub">Paste a public repository URL. We clone it read-only, find every third-party integration in it, and list the vendor changes that already apply — with the files they hit. The clone is deleted the moment the scan finishes.</p>
+      ${error ? `<div class="flash err">${esc(error)}</div>` : ''}
+      <div class="card"><div class="bd">
+        <form method="post" action="/scan">
+          <div class="field">
+            <label>Public repository URL</label>
+            <input name="repo" value="${esc(value)}" required autofocus placeholder="https://github.com/owner/repo" autocomplete="off">
+          </div>
+          <button class="btn primary" type="submit" style="width:100%;justify-content:center">Scan it</button>
+        </form>
+        <p class="small faint" style="margin:14px 0 0">GitHub, GitLab, Bitbucket, Codeberg and sourcehut. Private repositories need an account — or self-host and scan anything.</p>
+      </div></div>
+      <div class="card"><div class="bd">
+        <h3>What you get back</h3>
+        <p class="small muted" style="margin:0">An inventory of the SDKs, endpoints, pinned API versions and runtime pins in the code; every published vendor change that maps onto them; and the deadlines, soonest first. Shareable link, no signup.</p>
+      </div></div>
+    </div>`
+  });
+}
+
+export function scanPending({ account = null, scan }) {
+  return page({
+    title: `Scanning ${scan.repo_name}`, account,
+    body: `<div style="max-width:560px;margin:70px auto;text-align:center">
+      <h1 style="font-size:22px">Scanning ${esc(scan.repo_name)}…</h1>
+      <p class="sub">Cloning the repository, reading the manifests and source, then checking it against every vendor calendar we watch. This usually takes a few seconds.</p>
+      <div class="card"><div class="bd">
+        <div class="progress" aria-hidden="true"><span></span></div>
+        <p class="small muted" style="margin:14px 0 0">This page refreshes itself. ${scan.status === 'queued' ? 'Waiting for a scan slot.' : 'Working.'}</p>
+      </div></div>
+      <p class="small faint">If nothing happens after a minute, <a href="/r/${esc(scan.token)}">reload</a>.</p>
+    </div>`,
+    head: '<meta http-equiv="refresh" content="3">'
+  });
+}
+
+const scanFindingRow = (f) => `
+  <tr class="row">
+    <td style="width:88px">${severityPill(f.severity)}</td>
+    <td>
+      <span class="t-title">${f.url ? `<a href="${esc(f.url)}" rel="noopener nofollow">${esc(f.title)}</a>` : esc(f.title)}</span>
+      <span class="t-meta">${esc(f.vendorName)}${f.publishedAt ? ` · announced ${esc(f.publishedAt.slice(0, 10))}` : ''}</span>
+      ${f.matchedFiles
+        ? `<div class="filelist" style="margin-top:8px">${f.files.map((x) => `<div>${esc(x.file)}<span class="ln">${x.lines?.length ? ':' + x.lines.slice(0, 4).join(', ') : ''}</span></div>`).join('')}</div>`
+        : '<div class="small faint" style="margin-top:6px">No direct code match — flagged because this vendor is in the stack.</div>'}
+    </td>
+    <td style="width:170px">${deadlineCell(f.deadlineAt)}</td>
+  </tr>`;
+
+export function scanReport({ account = null, scan, saved = false }) {
+  const r = scan.report;
+  if (!r) return scanForm({ account, error: scan.error || 'That scan did not finish.' });
+  const s = r.summary;
+  const expiredLine = s.expired
+    ? `<strong>${s.expired}</strong> deadline${s.expired === 1 ? ' has' : 's have'} already passed`
+    : 'nothing past its deadline yet';
+
+  const integrations = r.integrations.map((i) => `
+    <tr class="row">
+      <td><span class="t-title">${esc(i.name)}</span><span class="t-meta">${esc(i.category || '')} · ${i.files} file${i.files === 1 ? '' : 's'}</span></td>
+      <td style="width:180px" class="small mono muted">${esc((i.evidence[0]?.value || '').slice(0, 28))}</td>
+      <td style="width:130px">${i.sources ? `<span class="pill ok">watched</span>` : '<span class="pill plain">no feed yet</span>'}</td>
+    </tr>`).join('');
+
+  return page({
+    title: `${scan.repo_name} · scan report`, account, wide: false,
+    meta: {
+      title: `${scan.repo_name}: ${s.findings} outstanding API change${s.findings === 1 ? '' : 's'}`,
+      description: `${s.integrations} third-party integrations detected, ${s.findings} published vendor changes that apply, ${s.expired} deadline(s) already passed.`,
+      url: `${config.baseUrl}/r/${scan.token}`
+    },
+    body: `
+    <p class="small"><a href="/scan">← Scan another repository</a></p>
+    <h1 style="font-family:var(--mono, inherit)">${esc(r.repo)}</h1>
+    <p class="sub">${s.files} files read · ${esc(r.scannedAt.slice(0, 10))} · <a href="${esc(r.repoUrl)}" rel="noopener nofollow">source</a></p>
+
+    <div class="grid c4 mb">
+      <div class="stat"><div class="n">${s.integrations}</div><div class="l">Integrations found</div></div>
+      <div class="stat ${s.findings ? 'high' : 'ok'}"><div class="n">${s.findings}</div><div class="l">Changes that apply</div></div>
+      <div class="stat ${s.expired ? 'crit' : ''}"><div class="n">${s.expired}</div><div class="l">Deadlines passed</div></div>
+      <div class="stat"><div class="n">${s.matched}</div><div class="l">Matched to code</div></div>
+    </div>
+
+    <div class="card mb"><div class="bd">
+      <p style="margin:0">This repository depends on <strong>${s.integrations}</strong> third-party services we can see, and ${expiredLine}.
+      ${s.soonest ? `The next deadline is <strong>${esc(s.soonest.slice(0, 10))}</strong>.` : ''}
+      ${s.unmonitored ? `<span class="muted">${s.unmonitored} of those vendors publish no feed we track yet.</span>` : ''}</p>
+    </div></div>
+
+    <div class="card">
+      <div class="hd"><h2>Outstanding changes</h2><span class="pill plain">${r.findings.length}</span>
+        <span class="small muted" style="margin-left:auto">worst first, then by deadline</span></div>
+      ${r.findings.length
+        ? `<div class="bd tight"><table><thead><tr><th>Severity</th><th>Change &amp; the files it hits</th><th>Deadline</th></tr></thead><tbody>${r.findings.map(scanFindingRow).join('')}</tbody></table></div>`
+        : `<div class="empty"><h3>Nothing outstanding</h3><p class="small">Either this repository is unusually current, or its vendors have been quiet. Continuous watching is how you keep it that way.</p></div>`}
+    </div>
+
+    <div class="card">
+      <div class="hd"><h2>Integrations detected</h2><span class="pill plain">${r.integrations.length}</span></div>
+      ${integrations ? `<div class="bd tight"><table><tbody>${integrations}</tbody></table></div>` : '<div class="empty small">No third-party integrations detected.</div>'}
+    </div>
+
+    <div class="card"><div class="bd">
+      <h2>This is one snapshot. The changes keep coming.</h2>
+      <p class="muted">Vendors publish deprecations every week. Watching this repository continuously means the next one arrives in Slack the day it is announced, mapped to the files it breaks.</p>
+      ${saved ? '<div class="flash ok">Thanks — we will be in touch.</div>' : `
+      <form method="post" action="/r/${esc(scan.token)}/email" class="row-form" style="margin-top:14px">
+        <div class="field" style="min-width:240px"><label>Watch this repository</label><input type="email" name="email" required placeholder="you@company.com"></div>
+        <button class="btn primary" type="submit">Keep me posted</button>
+      </form>`}
+      <p class="small faint" style="margin:12px 0 0">Or <a href="/signup?repo=${encodeURIComponent(r.repoUrl)}">create an account</a> and start watching now.</p>
+    </div></div>
+
+    <p class="small faint">Static analysis has limits: a URL built at runtime, or a call through a generated client, may not be visible here. A finding marked “no direct code match” means exactly that — check it by hand.</p>`
   });
 }

@@ -111,6 +111,11 @@ label{display:block;font-size:13px;font-weight:560;margin-bottom:5px;color:var(-
 .mt{margin-top:16px} .mb{margin-bottom:16px}
 .hr{height:1px;background:var(--border);margin:18px 0}
 .badge-count{display:inline-block;min-width:19px;padding:0 6px;border-radius:99px;background:var(--critical);color:#fff;font-size:11px;font-weight:700;text-align:center;line-height:19px}
+.progress{height:5px;border-radius:99px;background:var(--surface-2);overflow:hidden}
+.progress span{display:block;height:100%;width:38%;border-radius:99px;background:var(--accent);
+  animation:slide 1.25s ease-in-out infinite}
+@keyframes slide{0%{transform:translateX(-100%)}100%{transform:translateX(300%)}}
+@media (prefers-reduced-motion:reduce){.progress span{animation:none;width:100%;opacity:.5}}
 .hero{padding:56px 0 30px;text-align:center}
 .hero h1{font-size:40px;line-height:1.12;letter-spacing:-.03em;max-width:730px;margin:0 auto 16px}
 .hero p{font-size:17.5px;color:var(--muted);max-width:600px;margin:0 auto 26px;line-height:1.6}
@@ -126,7 +131,7 @@ label{display:block;font-size:13px;font-weight:560;margin-bottom:5px;color:var(-
 footer{border-top:1px solid var(--border);padding:26px 0;color:var(--faint);font-size:13px}
 `;
 
-export function page({ title, account = null, active = '', body, flash = null, wide = false }) {
+export function page({ title, account = null, active = '', body, flash = null, wide = false, meta = null, head = '' }) {
   const nav = account
     ? `<nav class="nav">
         <a href="/dashboard" class="${active === 'dashboard' ? 'active' : ''}">Radar</a>
@@ -136,12 +141,18 @@ export function page({ title, account = null, active = '', body, flash = null, w
         <a href="/settings" class="${active === 'settings' ? 'active' : ''}">Settings</a>
         <form method="post" action="/logout" style="display:inline;margin-left:6px"><button class="btn sm" type="submit">Sign out</button></form>
       </nav>`
-    : `<nav class="nav"><a href="/#pricing">Pricing</a><a href="/docs">Docs</a><a href="/login">Sign in</a><a class="btn sm primary" href="/signup">Start free</a></nav>`;
+    : `<nav class="nav"><a href="/scan">Free scan</a><a href="/#pricing">Pricing</a><a href="/docs">Docs</a><a href="/login">Sign in</a><a class="btn sm primary" href="/signup">Start free</a></nav>`;
 
   return `<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(title)} · Sunset Radar</title>
-<meta name="description" content="Sunset Radar watches the third-party APIs your code actually calls and warns you before they break.">
+<meta name="description" content="${esc(meta?.description || 'Sunset Radar watches the third-party APIs your code actually calls and warns you before they break.')}">
+${meta ? `<meta property="og:title" content="${esc(meta.title || title)}">
+<meta property="og:description" content="${esc(meta.description || '')}">
+<meta property="og:type" content="website">
+${meta.url ? `<meta property="og:url" content="${esc(meta.url)}">` : ''}
+<meta name="twitter:card" content="summary_large_image">` : ''}
+${head}
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%23c2410c'/%3E%3Cpath d='M4 20h24' stroke='%23fff' stroke-width='3'/%3E%3C/svg%3E">
 <style>${CSS}</style></head>
 <body>

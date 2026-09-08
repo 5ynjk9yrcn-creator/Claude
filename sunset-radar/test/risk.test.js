@@ -44,9 +44,20 @@ test('impact and imminence drive severity', () => {
   assert.equal(severityFor({ ...base, matchedFiles: 0 }).severity, 'high');
   assert.equal(severityFor({ ...base, matchedFiles: 3 }).severity, 'critical');
   const far = severityFor({ score: 100, matchedFiles: 0, deadlineAt: '2028-01-01T00:00:00Z', now: NOW });
-  assert.equal(far.severity, 'high', 'a distant change with no code match is not an emergency');
+  assert.equal(far.severity, 'low', 'sixteen months out, matching nothing, is a backlog item — see the decay test below');
   const near = severityFor({ score: 100, matchedFiles: 0, deadlineAt: '2026-09-20T00:00:00Z', now: NOW });
   assert.equal(near.severity, 'critical');
+});
+
+test('urgency decays with distance, but only when a date was given', () => {
+  const far = { score: 100, matchedFiles: 0, now: NOW };
+  assert.equal(severityFor({ ...far, deadlineAt: '2030-01-01T00:00:00Z' }).severity, 'info', 'four years out is not news');
+  assert.equal(severityFor({ ...far, deadlineAt: '2028-03-01T00:00:00Z' }).severity, 'low', 'eighteen months out is a backlog item');
+  assert.equal(severityFor({ ...far, deadlineAt: '2026-11-01T00:00:00Z' }).severity, 'high', 'two months out still matters');
+  assert.equal(severityFor({ score: 100, matchedFiles: 2, deadlineAt: '2030-01-01T00:00:00Z', now: NOW }).severity, 'low',
+    'a distant deadline that touches your code stays on the list, quietly');
+  assert.equal(severityFor({ score: 100, matchedFiles: 0, deadlineAt: null, now: NOW }).severity, 'high',
+    'no stated date is not the same as far away — it could land any time');
 });
 
 test('severity ordering is stable', () => {

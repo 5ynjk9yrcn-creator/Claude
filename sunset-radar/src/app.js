@@ -9,6 +9,7 @@ import { startScheduler, stopScheduler } from './scheduler.js';
 
 // Importing these registers their routes on the shared router.
 import './routes/ui.js';
+import './routes/public.js';
 import './routes/api.js';
 import './routes/billing.js';
 

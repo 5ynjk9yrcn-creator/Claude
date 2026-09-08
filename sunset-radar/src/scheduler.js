@@ -10,6 +10,7 @@ import { dispatchPending, sendDigests } from './notify/dispatch.js';
 import { sweepRateLimits } from './http/ratelimit.js';
 import { purgeExpiredSessions } from './store/accounts.js';
 import { listAllProjects } from './store/projects.js';
+import { purgeExpiredScans } from './pipeline/publicscan.js';
 
 let timer = null;
 const inFlight = new Set();
@@ -69,6 +70,7 @@ export async function tick({ now = new Date() } = {}) {
   await job('housekeeping', async () => {
     sweepRateLimits();
     purgeExpiredSessions();
+    purgeExpiredScans();
     // Keep the run log from growing forever.
     run("DELETE FROM runs WHERE started_at < ?", new Date(Date.now() - 30 * 86400000).toISOString());
   });

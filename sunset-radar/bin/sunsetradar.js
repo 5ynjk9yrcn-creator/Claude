@@ -12,6 +12,8 @@ import { pollCycle, checkSources } from '../src/pipeline/poll.js';
 import { dispatchPending, sendDigests } from '../src/notify/dispatch.js';
 import { listFindings, countFindings } from '../src/store/findings.js';
 import { seedDemo } from '../src/demo.js';
+import { readRepoList, bulkScan, aggregate, toMarkdown, toCsv } from '../src/pipeline/bulk.js';
+import { createPublicScan, runPublicScan } from '../src/pipeline/publicscan.js';
 import { tick } from '../src/scheduler.js';
 
 const args = process.argv.slice(2);
@@ -207,6 +209,60 @@ async function main() {
       break;
     }
 
+    case 'scan:public': {
+      bootstrap();
+      const url = positional[0];
+      if (!url) die('usage: sunsetradar scan:public <public repo url>');
+      const created = createPublicScan({ repoUrl: url, ip: 'cli' });
+      if (!created.ok) die(created.error);
+      const done = await runPublicScan(created.scan.token);
+      if (done.status !== 'ready') die(done.error || 'scan did not finish');
+      const r = done.report;
+      console.log(`${r.repo}: ${r.summary.integrations} integrations, ${r.summary.findings} outstanding changes, ${r.summary.expired} past deadline`);
+      table(r.findings.map((f) => ({
+        severity: f.severity, vendor: f.vendorName, change: f.title.slice(0, 54),
+        files: f.matchedFiles, deadline: f.deadlineAt ? f.deadlineAt.slice(0, 10) : '—'
+      })), ['severity', 'vendor', 'change', 'files', 'deadline']);
+      console.log(`\nShareable report: ${config.baseUrl}/r/${done.token}`);
+      break;
+    }
+
+    case 'bulk': {
+      bootstrap();
+      const fs = await import('node:fs');
+      const path = await import('node:path');
+      const list = flag('repos');
+      if (!list || list === true) die('usage: sunsetradar bulk --repos repos.txt [--out ./out] [--limit N] [--title "The Deprecation Report"]');
+      let repos = readRepoList(list);
+      const cap = parseInt(flag('limit'), 10);
+      if (Number.isFinite(cap)) repos = repos.slice(0, cap);
+      if (!repos.length) die('no usable repository URLs in that file');
+
+      const out = flag('out') && flag('out') !== true ? flag('out') : './deprecation-report';
+      fs.default.mkdirSync(out, { recursive: true });
+      console.log(`scanning ${repos.length} repositories…`);
+
+      const { reports, failures } = await bulkScan(repos, {
+        warm: !flag('no-warm'),
+        onProgress: ({ index, total, repo, report, error }) => {
+          const detail = error ? `failed: ${String(error).slice(0, 60)}`
+            : `${report.summary.integrations} integrations, ${report.summary.findings} changes, ${report.summary.expired} past deadline`;
+          console.log(`  [${index}/${total}] ${repo} — ${detail}`);
+        }
+      });
+
+      const agg = aggregate(reports);
+      fs.default.writeFileSync(path.default.join(out, 'aggregate.json'), JSON.stringify(agg, null, 2));
+      fs.default.writeFileSync(path.default.join(out, 'reports.json'), JSON.stringify(reports, null, 2));
+      fs.default.writeFileSync(path.default.join(out, 'report.md'), toMarkdown(agg, { title: flag('title') && flag('title') !== true ? flag('title') : 'The Deprecation Report' }));
+      fs.default.writeFileSync(path.default.join(out, 'leads.csv'), toCsv(agg));
+
+      console.log(`\n${reports.length} scanned, ${failures.length} failed`);
+      console.log(JSON.stringify(agg.headline, null, 2));
+      console.log(`\nwrote ${out}/report.md (the post), aggregate.json, reports.json and leads.csv (the outreach list)`);
+      break;
+    }
+
     case 'site:build': {
       // Export the marketing page and docs as static HTML, for hosting the
       // front of the funnel separately from the app.
@@ -240,6 +296,8 @@ SETUP
   account:create <email>           Create an account (prints password + API key)
   project:add "<name>" --path DIR  Add a project and scan it (or --url https://github.com/…)
   demo                             Seed a demo account with a sample repo and findings
+  scan:public <repo url>           Free-scan a public repo and print the report
+  bulk --repos FILE                Scan many public repos; writes the post, the data and a lead list
   site:build [--out DIR]           Export the marketing page and docs as static HTML
 
 RUN

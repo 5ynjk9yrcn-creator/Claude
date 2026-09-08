@@ -6,6 +6,7 @@ const LIMITS = {
   auth: { windowMs: 15 * 60000, max: 20 },     // login/signup attempts
   api: { windowMs: 60000, max: 120 },          // authenticated API
   write: { windowMs: 60000, max: 30 },         // scans, channel tests
+  publicscan: { windowMs: 3600000, max: 6 },   // anonymous repo scans: cloning costs real money
   default: { windowMs: 60000, max: 300 }
 };
 

@@ -99,6 +99,7 @@ function normalizeDate(raw) {
 }
 
 export const SEVERITIES = ['info', 'low', 'medium', 'high', 'critical'];
+const lower = (a, b) => (severityRank(a) > severityRank(b) ? b : a);
 export const severityRank = (s) => Math.max(0, SEVERITIES.indexOf(s));
 
 /**
@@ -131,6 +132,16 @@ export function severityFor({ score, matchedFiles = 0, deadlineAt = null, now = 
 
   // A deadline that passed months ago and still matches nothing in the code is
   // history, not news: the pin it would have hit is not there.
-  if (matchedFiles === 0 && daysLeft < -60) severity = severityRank(severity) > severityRank('low') ? 'low' : severity;
+  if (matchedFiles === 0 && daysLeft < -60) severity = lower(severity, 'low');
+
+  // Urgency decays with distance. Version lifecycle feeds publish every future
+  // cycle at once, so without this a single vendor floods the list with dates
+  // three and four years out. Only a stated deadline decays: "no date given"
+  // means it could land any time, which is not the same as far away.
+  if (deadlineAt) {
+    if (daysLeft > 730) severity = lower(severity, matchedFiles ? 'low' : 'info');
+    else if (daysLeft > 365) severity = lower(severity, matchedFiles ? 'medium' : 'low');
+  }
+
   return { severity, total };
 }

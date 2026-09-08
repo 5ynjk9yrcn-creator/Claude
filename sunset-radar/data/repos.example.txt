@@ -1,0 +1,6 @@
+# One public repository per line. "owner/repo" or a full https URL.
+# Start with projects in your ICP: application repos beat libraries, because
+# applications are the ones carrying payment, messaging and auth integrations.
+vercel/ai-chatbot
+expressjs/express
+jonschlinkert/is-odd

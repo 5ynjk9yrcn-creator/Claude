@@ -4,7 +4,7 @@
 import crypto from 'node:crypto';
 import { config } from '../config.js';
 import { log } from '../log.js';
-import { run, one, nowIso, toJson } from '../db.js';
+import { all, run, one, nowIso, toJson } from '../db.js';
 import { id } from '../store/ids.js';
 import { fetchUrl } from '../net/fetch.js';
 import { parseFeed } from '../parse/feed.js';
@@ -172,6 +172,35 @@ export function applyVerdict(item, verdict) {
   else if (verdict.severity === 'high') score = Math.max(score, 65);
   run('UPDATE items SET summary = ?, deadline_at = ?, risk_score = ?, enriched = 1 WHERE id = ?',
     summary, deadline, score, item.id);
+}
+
+/**
+ * Poll the sources of specific vendors now, ignoring the watch requirement.
+ * A free scan of a public repo uses this to warm the shared pool: the first
+ * person to scan a repo using an unwatched vendor pays for the fetch, and
+ * everyone after them reads it from the database.
+ */
+export async function pollVendorSources(vendorIds, { limit = 12, concurrency = 4, minAgeMinutes = 30, fetchImpl = fetchUrl, now = Date.now() } = {}) {
+  if (!vendorIds.length) return { sources: 0, newItems: 0, failed: 0 };
+  const placeholders = vendorIds.map(() => '?').join(',');
+  const rows = all(
+    `SELECT s.*, v.slug AS vendor_slug, v.name AS vendor_name
+     FROM sources s JOIN vendors v ON v.id = s.vendor_id
+     WHERE s.vendor_id IN (${placeholders}) AND s.enabled = 1`,
+    ...vendorIds
+  );
+  const fresh = (s) => s.last_polled_at && new Date(s.last_polled_at).getTime() > now - minAgeMinutes * 60000;
+  const due = rows.filter((s) => !fresh(s) && s.failure_count < 4).slice(0, limit);
+
+  const stats = { sources: due.length, newItems: 0, failed: 0, items: [] };
+  const results = await mapLimit(due, concurrency, (source) => pollSource(source, { fetchImpl }));
+  for (const r of results) {
+    if (!r) continue;
+    if (r.error) stats.failed++;
+    stats.newItems += r.newItems;
+    stats.items.push(...r.items);
+  }
+  return stats;
 }
 
 /** Re-check every source URL and report which ones are dead. Ops hygiene. */
