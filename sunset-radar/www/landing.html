@@ -1,0 +1,417 @@
+<title>Sunset Radar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;1,6..72,300&display=swap">
+<style>
+/* Dusk, dark-first. Light mode is the same horizon at dawn. */
+:root{
+  --ground:#10131c; --surface:#171b27; --surface-2:#1d2231; --line:#262c3d; --line-soft:#1e2432;
+  --ink:#e9ebf3; --ink-2:#98a1bb; --ink-3:#6b7492;
+  --ember:#ff8a3d; --ember-deep:#e2661a; --ember-wash:rgba(255,138,61,.12);
+  --rose:#ff5c7a; --rose-wash:rgba(255,92,122,.13);
+  --dawn-top:#1a1f30; --dawn-bottom:#2b2033;
+  --shadow:0 1px 0 rgba(255,255,255,.03), 0 18px 40px -28px rgba(0,0,0,.9);
+  --display:"Bricolage Grotesque","Helvetica Neue",Arial,sans-serif;
+  --body:"Newsreader",Georgia,"Times New Roman",serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:light){
+  :root:not([data-theme="dark"]){
+    --ground:#eef1f7; --surface:#ffffff; --surface-2:#f5f7fb; --line:#d9dfeb; --line-soft:#e6eaf3;
+    --ink:#121724; --ink-2:#525c78; --ink-3:#7b849e;
+    --ember:#c9540f; --ember-deep:#a8430a; --ember-wash:rgba(201,84,15,.09);
+    --rose:#bd2946; --rose-wash:rgba(189,41,70,.09);
+    --dawn-top:#dfe6f4; --dawn-bottom:#f6e3d8;
+    --shadow:0 1px 0 rgba(255,255,255,.7), 0 16px 34px -26px rgba(18,23,36,.4);
+  }
+}
+:root[data-theme="light"]{
+  --ground:#eef1f7; --surface:#ffffff; --surface-2:#f5f7fb; --line:#d9dfeb; --line-soft:#e6eaf3;
+  --ink:#121724; --ink-2:#525c78; --ink-3:#7b849e;
+  --ember:#c9540f; --ember-deep:#a8430a; --ember-wash:rgba(201,84,15,.09);
+  --rose:#bd2946; --rose-wash:rgba(189,41,70,.09);
+  --dawn-top:#dfe6f4; --dawn-bottom:#f6e3d8;
+  --shadow:0 1px 0 rgba(255,255,255,.7), 0 16px 34px -26px rgba(18,23,36,.4);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:var(--body); font-size:18px; line-height:1.62;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+}
+::selection{background:var(--ember-wash); color:var(--ink)}
+a{color:var(--ink); text-decoration-color:var(--ember); text-underline-offset:3px}
+a:focus-visible,button:focus-visible{outline:2px solid var(--ember); outline-offset:3px; border-radius:3px}
+
+.shell{max-width:1080px; margin:0 auto; padding:0 28px}
+.shell .col{max-width:660px}                       /* ~65 characters of running text */
+
+/* The horizon: the page's one recurring structural device. */
+.horizon{height:1px; border:0; margin:0;
+  background:linear-gradient(90deg,var(--ember) 0%,var(--line) 42%,transparent 100%); opacity:.75}
+
+h1,h2,h3,.eyebrow,.stat-n,.btn,nav a{font-family:var(--display)}
+h1{font-size:clamp(2.6rem,6.4vw,4.4rem); line-height:1.02; letter-spacing:-.035em; font-weight:800;
+   margin:0 0 22px; text-wrap:balance; max-width:19ch}
+h2{font-size:clamp(1.6rem,3.2vw,2.2rem); line-height:1.12; letter-spacing:-.025em; font-weight:700;
+   margin:0 0 14px; text-wrap:balance}
+h3{font-size:1.02rem; letter-spacing:-.01em; font-weight:700; margin:0 0 7px}
+p{margin:0 0 18px}
+.lede{font-size:1.24rem; line-height:1.55; color:var(--ink-2); font-weight:300; max-width:34em}
+.eyebrow{font-family:var(--mono); font-size:.72rem; font-weight:500; letter-spacing:.18em;
+  text-transform:uppercase; color:var(--ember); margin:0 0 18px}
+.muted{color:var(--ink-2)} .small{font-size:.86rem; line-height:1.5}
+code,.mono{font-family:var(--mono); font-size:.86em; font-variant-ligatures:none}
+
+/* ---- masthead ---- */
+header.top{position:sticky; top:0; z-index:30; background:var(--surface); background:color-mix(in srgb,var(--ground) 88%,transparent);
+  backdrop-filter:blur(10px); border-bottom:1px solid var(--line-soft)}
+header.top .shell{display:flex; align-items:center; gap:26px; height:62px}
+.brand{display:flex; align-items:center; gap:10px; font-family:var(--display); font-weight:700;
+  letter-spacing:-.02em; font-size:1.02rem; text-decoration:none}
+.sun{width:13px; height:13px; border-radius:50%; background:var(--ember);
+  box-shadow:0 0 0 5px var(--ember-wash), 0 0 22px 2px var(--ember-wash)}
+nav{margin-left:auto; display:flex; gap:4px; align-items:center; flex-wrap:wrap}
+nav a{font-size:.88rem; font-weight:500; color:var(--ink-2); padding:7px 11px; border-radius:7px; text-decoration:none}
+nav a:hover{color:var(--ink); background:var(--surface-2)}
+
+.btn{display:inline-flex; align-items:center; gap:9px; font-size:.94rem; font-weight:700; letter-spacing:-.01em;
+  padding:12px 20px; border-radius:9px; border:1px solid var(--line); background:var(--surface);
+  color:var(--ink); text-decoration:none; cursor:pointer; transition:transform .12s ease, background .12s ease}
+.btn:hover{transform:translateY(-1px); background:var(--surface-2)}
+.btn.solid{background:var(--ember); border-color:var(--ember); color:#14100c}
+.btn.solid:hover{background:var(--ember-deep); border-color:var(--ember-deep)}
+.btn.sm{padding:8px 14px; font-size:.86rem}
+@media (prefers-reduced-motion:reduce){.btn:hover{transform:none}}
+
+/* ---- hero ---- */
+.hero{position:relative; overflow:hidden; border-bottom:1px solid var(--line-soft);
+  background:linear-gradient(180deg,var(--dawn-top) 0%,var(--ground) 62%)}
+.hero .shell{padding:76px 28px 0}
+.hero-grid{display:grid; grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr); gap:56px; align-items:end}
+@media (max-width:900px){.hero-grid{grid-template-columns:1fr; gap:38px} .hero .shell{padding-top:52px}}
+.hero-cta{display:flex; gap:12px; flex-wrap:wrap; margin:30px 0 14px}
+.hero-note{font-family:var(--mono); font-size:.76rem; color:var(--ink-3); letter-spacing:.02em}
+
+/* the expiry ledger — the hero's instrument */
+.ledger{background:var(--surface); border:1px solid var(--line); border-radius:14px 14px 0 0;
+  box-shadow:var(--shadow); overflow:hidden; margin-bottom:-1px}
+.ledger-hd{display:flex; align-items:baseline; gap:10px; padding:15px 20px; border-bottom:1px solid var(--line-soft)}
+.ledger-hd strong{font-family:var(--display); font-size:.92rem; letter-spacing:-.01em}
+.ledger-hd span{font-family:var(--mono); font-size:.7rem; color:var(--ink-3); letter-spacing:.1em;
+  text-transform:uppercase; margin-left:auto}
+.row{display:grid; grid-template-columns:1fr auto auto; gap:16px; align-items:center;
+  padding:13px 20px; border-bottom:1px solid var(--line-soft)}
+.row:last-child{border-bottom:0}
+.row .what{font-family:var(--mono); font-size:.83rem; color:var(--ink)}
+.row .when{font-family:var(--mono); font-size:.83rem; color:var(--ink-2); font-variant-numeric:tabular-nums}
+.row .left{font-family:var(--mono); font-size:.78rem; font-weight:700; letter-spacing:.02em;
+  font-variant-numeric:tabular-nums; padding:3px 9px; border-radius:99px; white-space:nowrap;
+  background:var(--ember-wash); color:var(--ember)}
+.row.gone .left{background:var(--rose-wash); color:var(--rose)}
+.row.gone .what{color:var(--ink-2); text-decoration:line-through; text-decoration-color:var(--rose)}
+.ledger-ft{padding:12px 20px; background:var(--surface-2); font-size:.8rem; line-height:1.5; color:var(--ink-3);
+  font-family:var(--body)}
+
+/* ---- sections ---- */
+section{padding:74px 0}
+section.tight{padding:54px 0}
+.kicker{display:flex; align-items:baseline; gap:14px; margin-bottom:26px}
+
+/* steps: numbered because the pipeline genuinely runs in this order */
+.steps{display:grid; gap:0; margin-top:34px; border-top:1px solid var(--line-soft)}
+.step{display:grid; grid-template-columns:64px minmax(0,1fr) minmax(0,1.02fr); gap:26px;
+  padding:26px 0; border-bottom:1px solid var(--line-soft); align-items:start}
+@media (max-width:820px){.step{grid-template-columns:44px minmax(0,1fr); gap:18px}
+  .step .demo{grid-column:2}}
+.step .n{font-family:var(--mono); font-size:.8rem; font-weight:700; color:var(--ember);
+  padding-top:3px; letter-spacing:.04em}
+.step p{margin:0; font-size:1rem; color:var(--ink-2)}
+.demo{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:13px 15px;
+  font-family:var(--mono); font-size:.79rem; line-height:1.75; color:var(--ink-2); overflow-x:auto}
+.demo b{color:var(--ink); font-weight:500}
+.demo .k{color:var(--ember)}
+
+/* the finding brief — the second instrument */
+.brief{background:var(--surface); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow);
+  overflow:hidden; margin-top:30px}
+.brief-hd{padding:18px 22px; border-bottom:1px solid var(--line-soft);
+  border-left:3px solid var(--rose); display:flex; flex-wrap:wrap; gap:10px; align-items:center}
+.chip{font-family:var(--mono); font-size:.68rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase;
+  padding:3px 9px; border-radius:99px; background:var(--surface-2); color:var(--ink-2); border:1px solid var(--line)}
+.chip.crit{background:var(--rose-wash); color:var(--rose); border-color:transparent}
+.chip.ex{background:var(--ember-wash); color:var(--ember); border-color:transparent}
+.brief-title{font-family:var(--display); font-weight:700; font-size:1.16rem; letter-spacing:-.02em;
+  margin:12px 22px 0; width:calc(100% - 44px)}
+.brief-body{padding:14px 22px 20px; display:grid; gap:16px}
+.brief-body p{margin:0; font-size:.98rem; color:var(--ink-2)}
+.files{font-family:var(--mono); font-size:.82rem; background:var(--surface-2); border:1px solid var(--line-soft);
+  border-radius:9px; padding:12px 14px; display:grid; gap:5px; overflow-x:auto}
+.files span{color:var(--ember)}
+.deadline-bar{display:flex; align-items:center; gap:11px; padding:11px 14px; border-radius:9px;
+  background:var(--rose-wash); color:var(--rose); font-family:var(--mono); font-size:.84rem; font-weight:500}
+
+/* comparison */
+.table-wrap{overflow-x:auto; margin-top:26px; border:1px solid var(--line); border-radius:12px; background:var(--surface)}
+table{width:100%; border-collapse:collapse; font-family:var(--body); font-size:.95rem; min-width:560px}
+th,td{text-align:left; padding:14px 18px; border-bottom:1px solid var(--line-soft); vertical-align:top}
+th{font-family:var(--mono); font-size:.7rem; letter-spacing:.13em; text-transform:uppercase; color:var(--ink-3);
+  font-weight:500; background:var(--surface-2)}
+tr:last-child td{border-bottom:0}
+td:first-child{font-family:var(--display); font-weight:500; white-space:nowrap}
+td.miss{color:var(--ink-2)}
+tr.us td{background:var(--ember-wash)}
+tr.us td:first-child{color:var(--ember); font-weight:700}
+
+/* pricing */
+.tiers{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:16px; margin-top:30px}
+.tier{background:var(--surface); border:1px solid var(--line); border-radius:13px; padding:22px;
+  display:flex; flex-direction:column; gap:14px}
+.tier.lead{border-color:var(--ember); box-shadow:var(--shadow)}
+.tier .name{font-family:var(--mono); font-size:.72rem; letter-spacing:.15em; text-transform:uppercase; color:var(--ink-3)}
+.tier .price{font-family:var(--display); font-size:2.1rem; font-weight:800; letter-spacing:-.04em; line-height:1}
+.tier .price i{font-style:normal; font-size:.9rem; font-weight:500; color:var(--ink-3); letter-spacing:0}
+.tier ul{list-style:none; margin:0; padding:0; display:grid; gap:7px; font-size:.9rem; color:var(--ink-2)}
+.tier li{padding-left:19px; position:relative}
+.tier li::before{content:"→"; position:absolute; left:0; color:var(--ember); font-family:var(--mono); font-size:.78rem}
+
+/* faq */
+.faq{display:grid; gap:0; margin-top:26px; border-top:1px solid var(--line-soft)}
+.faq div{padding:20px 0; border-bottom:1px solid var(--line-soft)}
+.faq p{margin:0; color:var(--ink-2); font-size:1rem; max-width:62ch}
+
+/* closing call */
+.close{background:linear-gradient(180deg,var(--ground) 0%,var(--dawn-bottom) 100%); border-top:1px solid var(--line-soft)}
+.close .shell{padding-top:70px; padding-bottom:70px}
+footer{border-top:1px solid var(--line-soft); padding:26px 0; font-size:.84rem; color:var(--ink-3)}
+footer .shell{display:flex; gap:16px; flex-wrap:wrap; align-items:center}
+</style>
+
+<header class="top"><div class="shell">
+  <a class="brand" href="#top"><span class="sun" aria-hidden="true"></span> Sunset Radar</a>
+  <nav>
+    <a href="#how">How it works</a>
+    <a href="#finding">A finding</a>
+    <a href="#pricing">Pricing</a>
+    <a class="btn sm solid" href="#waitlist">Get early access</a>
+  </nav>
+</div></header>
+
+<div class="hero" id="top"><div class="shell">
+  <div class="hero-grid">
+    <div>
+      <p class="eyebrow">Deprecation monitoring for real codebases</p>
+      <h1>Your integrations have expiry dates.</h1>
+      <p class="lede">Thirty vendors, each quietly planning to remove an endpoint, retire an API version or drop a runtime — announced in a changelog nobody reads. Sunset Radar reads them all, then tells you which of <em>your</em> files break, and when.</p>
+      <div class="hero-cta">
+        <a class="btn solid" href="#waitlist">Get early access</a>
+        <a class="btn" href="#how">See how it works</a>
+      </div>
+      <p class="hero-note">Read-only. No agent in your build. Self-host it or don't.</p>
+    </div>
+
+    <div class="ledger" id="ledger">
+      <div class="ledger-hd"><strong>One vendor's calendar</strong><span id="today">Node.js</span></div>
+      <div class="row" data-eol="2025-04-30"><span class="what">node 18</span><span class="when">2025-04-30</span><span class="left">—</span></div>
+      <div class="row" data-eol="2026-04-30"><span class="what">node 20</span><span class="when">2026-04-30</span><span class="left">—</span></div>
+      <div class="row" data-eol="2025-06-01"><span class="what">node 23</span><span class="when">2025-06-01</span><span class="left">—</span></div>
+      <div class="row" data-eol="2027-04-30"><span class="what">node 22</span><span class="when">2027-04-30</span><span class="left">—</span></div>
+      <div class="row" data-eol="2026-06-01"><span class="what">node 25</span><span class="when">2026-06-01</span><span class="left">—</span></div>
+      <p class="ledger-ft">Live countdown against the public end-of-life calendar. This is <em>one</em> dependency. Your stack has thirty, and only some of them publish a calendar at all.</p>
+    </div>
+  </div>
+</div></div>
+
+<section class="tight"><div class="shell"><div class="col">
+  <h2>Nobody is watching, and everybody assumes somebody is.</h2>
+  <p class="muted">The failure is always the same shape. A vendor posts a deprecation notice in March. Nobody on the team is subscribed. In October a request starts returning <code>410 Gone</code>, at 3am, in the part of the system that takes money.</p>
+  <p class="muted">The tools you already run cannot see it coming. Your lockfile scanner watches versions you chose; this is a change the vendor makes on their side, to code you never had. Status pages describe the present tense. A page-change monitor fires on every marketing tweak and knows nothing about your repository.</p>
+</div></div></section>
+
+<hr class="horizon">
+
+<section id="how"><div class="shell">
+  <div class="col">
+    <p class="eyebrow">The mechanism</p>
+    <h2>Two halves nobody had joined.</h2>
+    <p class="muted">What your code actually calls, and what your vendors are about to change. Each half is cheap alone. The join is the product.</p>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="n">01</div>
+      <div><h3>It reads the repository</h3><p>Manifests, hostnames, endpoint paths, pinned API versions, container tags, CI pins, SDK call sites — every integration, with the file and line as evidence.</p></div>
+      <div class="demo">
+<b>Dockerfile</b>:1        <span class="k">FROM node:18-alpine</span><br>
+<b>src/billing.js</b>:4    <span class="k">apiVersion: '2024-06-20'</span><br>
+<b>src/ai.js</b>:17        <span class="k">'text-embedding-ada-002'</span><br>
+<b>ci.yml</b>:7           <span class="k">actions/checkout@v3</span>
+      </div>
+    </div>
+    <div class="step">
+      <div class="n">02</div>
+      <div><h3>It watches those vendors</h3><p>Changelogs, release feeds, deprecation pages and end-of-life calendars — polled continuously, de-duplicated across feeds, and scored for whether anything actually breaks.</p></div>
+      <div class="demo">
+rss · atom · json · github releases<br>
+html changelogs · eol calendars<br>
+<b>49 vendors</b> in the catalogue<br>
+<span class="k">"no action required" → filed, not sent</span>
+      </div>
+    </div>
+    <div class="step">
+      <div class="n">03</div>
+      <div><h3>It maps the notice onto your code</h3><p>The announcement names an endpoint, a version, a model, an image tag. Your inventory says where those live. What arrives is a work item, not a newsletter.</p></div>
+      <div class="demo">
+notice:  <span class="k">node 18 is past end of life</span><br>
+match:   Dockerfile:1, package.json:5,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .github/workflows/ci.yml:10<br>
+verdict: <b>critical · deadline passed</b>
+      </div>
+    </div>
+  </div>
+</div></section>
+
+<hr class="horizon">
+
+<section id="finding"><div class="shell">
+  <div class="col">
+    <p class="eyebrow">What lands in Slack</p>
+    <h2>A brief, not a bulletin.</h2>
+    <p class="muted">Below is a real finding, produced by a real run against the sample repository that ships with the product. Nothing about it was written by hand.</p>
+  </div>
+
+  <div class="brief">
+    <div class="brief-hd">
+      <span class="chip crit">critical</span>
+      <span class="chip">Node.js</span>
+      <span class="chip">Acme Checkout</span>
+      <span class="chip ex">real output</span>
+    </div>
+    <div class="brief-title">Node.js 18 is past end of life on 2025-04-30</div>
+    <div class="brief-body">
+      <p>This version no longer receives security updates. Container images and CI runners still pinned to node 18 will not receive patches for future CVEs.</p>
+      <div class="deadline-bar"><strong>Deadline 2025-04-30</strong> <span id="passed">— already in effect</span></div>
+      <div>
+        <p class="small" style="margin-bottom:8px">Your affected code — 3 files</p>
+        <div class="files">
+          <div>.github/workflows/ci.yml<span>:10</span> &nbsp; node-version: 18</div>
+          <div>Dockerfile<span>:1</span> &nbsp; FROM node:18-alpine</div>
+          <div>package.json<span>:5</span> &nbsp; "engines": { "node": "&gt;=18" }</div>
+        </div>
+      </div>
+      <p class="small">Severity is earned, not assumed: <em>critical</em> is reserved for changes that touch your code or expire within six weeks. Everything else waits in the digest.</p>
+    </div>
+  </div>
+</div></section>
+
+<hr class="horizon">
+
+<section class="tight"><div class="shell">
+  <div class="col"><h2>Why your existing tools miss this</h2></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Tool</th><th>What it sees</th><th>What it misses</th></tr></thead>
+    <tbody>
+      <tr><td>Dependency bots</td><td>Versions in your lockfile</td><td class="miss">Anything the vendor changes server-side, to code you never installed</td></tr>
+      <tr><td>Status pages</td><td>What is broken right now</td><td class="miss">What breaks in March</td></tr>
+      <tr><td>Page monitors</td><td>That a page changed</td><td class="miss">Whether it matters, and whether it touches your repository</td></tr>
+      <tr><td>Vendor email</td><td>Whatever marketing sends</td><td class="miss">The engineer who needed it never saw it</td></tr>
+      <tr class="us"><td>Sunset Radar</td><td>Your code × their calendar</td><td class="miss">Nothing you can act on — that is the whole design</td></tr>
+    </tbody>
+  </table></div>
+</div></section>
+
+<hr class="horizon">
+
+<section id="pricing"><div class="shell">
+  <div class="col">
+    <p class="eyebrow">Pricing</p>
+    <h2>Per stack, not per seat.</h2>
+    <p class="muted">Charging per head would punish the one behaviour worth encouraging: everybody reading the alerts.</p>
+  </div>
+  <div class="tiers">
+    <div class="tier">
+      <div><div class="name">Free</div><div class="price">$0<i> / month</i></div></div>
+      <ul><li>1 project</li><li>5 watched vendors</li><li>Daily polling</li><li>Email and webhook alerts</li></ul>
+      <a class="btn sm" href="#waitlist">Start free</a>
+    </div>
+    <div class="tier lead">
+      <div><div class="name">Pro</div><div class="price">$29<i> / month</i></div></div>
+      <ul><li>5 projects</li><li>40 watched vendors</li><li>Hourly polling</li><li>Slack, webhooks, email</li><li>JSON API and CI gate</li></ul>
+      <a class="btn sm solid" href="#waitlist">Get early access</a>
+    </div>
+    <div class="tier">
+      <div><div class="name">Team</div><div class="price">$99<i> / month</i></div></div>
+      <ul><li>25 projects</li><li>Unlimited vendors</li><li>15-minute polling</li><li>Per-project routing</li></ul>
+      <a class="btn sm" href="#waitlist">Get early access</a>
+    </div>
+    <div class="tier">
+      <div><div class="name">Self-hosted</div><div class="price">Yours<i> / on your box</i></div></div>
+      <ul><li>One process, one SQLite file</li><li>Zero runtime dependencies</li><li>Your code never leaves</li><li>Custom vendor sources</li></ul>
+      <a class="btn sm" href="#waitlist">Ask about licensing</a>
+    </div>
+  </div>
+</div></section>
+
+<hr class="horizon">
+
+<section class="tight"><div class="shell"><div class="col">
+  <h2>Reasonable questions</h2>
+  <div class="faq">
+    <div><h3>Does my source code leave my machine?</h3><p>No. The scanner reads the repository and stores short snippets as evidence so a finding can point at a line. Self-hosted, nothing leaves at all.</p></div>
+    <div><h3>What happens when a vendor moves their changelog?</h3><p>A built-in check reports every dead feed, and repairing them is the standing maintenance job. A silent blind spot would be the one unforgivable failure, so source health is a first-class screen.</p></div>
+    <div><h3>Will it drown me?</h3><p>The severity model exists to prevent exactly that. Announcements are scored, "no action required" is weighted down, old news only resurfaces if it still matches your code, and a newly connected Slack channel never replays the backlog.</p></div>
+    <div><h3>What if the scanner cannot see a call?</h3><p>Then it says so. A dynamically built URL may not be detected, and a finding with no code match is labelled "no direct match" rather than dressed up as certainty.</p></div>
+  </div>
+</div></div></section>
+
+<div class="close" id="waitlist"><div class="shell">
+  <div class="col">
+    <p class="eyebrow">Early access</p>
+    <h2>Find out what your repository is already carrying.</h2>
+    <p class="lede">The first scan lists the deprecations you are living with today — the ones with dates already behind them. It is usually an uncomfortable number.</p>
+    <div class="hero-cta">
+      <a class="btn solid" href="mailto:hello@sunsetradar.dev?subject=Sunset%20Radar%20early%20access&amp;body=Hi%20-%20I%27d%20like%20early%20access.%0A%0AStack%3A%20%0ARepos%3A%20%0A">Request early access</a>
+      <a class="btn" href="mailto:hello@sunsetradar.dev?subject=Sunset%20Radar%20self-hosting">Ask about self-hosting</a>
+    </div>
+    <p class="hero-note">Replace this address with your own inbox or form endpoint before sharing.</p>
+  </div>
+</div></div>
+
+<footer><div class="shell">
+  <span class="brand" style="font-size:.9rem"><span class="sun" aria-hidden="true" style="width:9px;height:9px"></span> Sunset Radar</span>
+  <span>Everyone else tells you what broke. This tells you what is about to.</span>
+</div></footer>
+
+<script>
+// Live day counts against the public end-of-life dates in the ledger.
+(function () {
+  var DAY = 86400000;
+  var today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+
+  document.querySelectorAll('.row[data-eol]').forEach(function (row) {
+    var eol = Date.parse(row.getAttribute('data-eol') + 'T00:00:00Z');
+    if (isNaN(eol)) return;
+    var days = Math.round((eol - today.getTime()) / DAY);
+    var tag = row.querySelector('.left');
+    if (days < 0) {
+      row.classList.add('gone');
+      tag.textContent = 'gone ' + Math.abs(days) + 'd';
+      tag.setAttribute('title', 'End of life passed ' + Math.abs(days) + ' days ago');
+    } else {
+      tag.textContent = days + 'd left';
+      tag.setAttribute('title', days + ' days until end of life');
+    }
+  });
+
+  var stamp = document.getElementById('today');
+  if (stamp) stamp.textContent = 'as of ' + today.toISOString().slice(0, 10);
+
+  var passed = document.getElementById('passed');
+  if (passed) {
+    var d = Math.round((today.getTime() - Date.parse('2025-04-30T00:00:00Z')) / DAY);
+    if (d > 0) passed.textContent = '— passed ' + d + ' days ago';
+  }
+})();
+</script>
